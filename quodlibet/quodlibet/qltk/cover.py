@@ -10,6 +10,7 @@
 from gi.repository import Gtk, GLib, Gdk, GdkPixbuf, Gio, GObject
 from senf import fsnative
 
+from quodlibet import config
 from quodlibet import qltk
 from quodlibet import app
 from quodlibet.util import thumbnails, print_w
@@ -20,6 +21,8 @@ from quodlibet.qltk.image import pixbuf_from_file, \
 # TODO: neater way of managing dependency on this particular plugin
 ALBUM_ART_PLUGIN_ID = "Download Album Art"
 
+BIG_IMAGES = {}
+
 
 class BigCenteredImage(qltk.Window):
     """Load an image and display it, scaling down to 1/2 the screen's
@@ -27,11 +30,13 @@ class BigCenteredImage(qltk.Window):
 
     This might leak memory, but it could just be Python's GC being dumb."""
 
-    def __init__(self, title, fileobj, parent):
+    def __init__(self, id, title, fileobj, parent):
         super(BigCenteredImage, self).__init__()
         self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
         self.set_skip_taskbar_hint(True)
         self.set_decorated(False)
+
+        self.id = id
 
         assert parent
         parent = qltk.get_top_parent(parent)
@@ -79,6 +84,8 @@ class BigCenteredImage(qltk.Window):
         self.get_child().show_all()
 
     def __destroy(self, *args):
+        if self.id in BIG_IMAGES:
+            del BIG_IMAGES[self.id]
         self.destroy()
 
 
@@ -224,19 +231,25 @@ class CoverImage(Gtk.EventBox):
         self.set_visible_window(False)
         self.__song = None
         self.__file = None
-        self.__current_bci = None
         self.__cancellable = None
+
+        self.name = ""
+        self.path = ""
+        self.album = ""
+        self.external = False
 
         self.add(ResizeImage(resize, size))
         self.connect('button-press-event', self.__show_cover)
         self.set_song(song)
         self.get_child().show_all()
 
-    def set_image(self, _file):
+    def set_image(self, _file, name="", external=False):
         if _file is not None and not _file.name:
             print_w('Got file which is not in the filesystem!')
         self.__file = _file
         self.get_child().set_file(_file)
+        self.name = name
+        self.external = external
 
     def set_song(self, song):
         self.__song = song
@@ -246,6 +259,18 @@ class CoverImage(Gtk.EventBox):
         cancellable = self.__cancellable = Gio.Cancellable()
 
         if song:
+            self.path = song["~filename"]
+            self.album = "" if "album" not in song else song["album"]
+            self.artist = ""
+            if 'performer' in song:
+                self.artist = song['performer']
+            elif 'albumartist' in song:
+                self.artist = song['albumartist']
+            elif 'album artist' in song:
+                self.artist = song['album artist']
+            elif 'artist' in song:
+                self.artist = song['artist']
+
             def cb(success, result):
                 if success:
                     try:
@@ -263,9 +288,6 @@ class CoverImage(Gtk.EventBox):
     def __nonzero__(self):
         return bool(self.__file)
 
-    def __reset_bci(self, bci):
-        self.__current_bci = None
-
     def __show_cover(self, box, event):
         """Show the cover as a detached BigCenteredImage.
         If one is already showing, destroy it instead
@@ -276,8 +298,13 @@ class CoverImage(Gtk.EventBox):
         if not song:
             return
 
-        if event.button != Gdk.BUTTON_PRIMARY or \
-                event.type != Gdk.EventType.BUTTON_PRESS:
+        multiple_images = \
+            config.getboolean('settings', 'multiple_big_images', False)
+        current_id = "|".join([self.artist, self.album,
+                               self.name, str(self.external)])
+
+        if (event.button != Gdk.BUTTON_PRIMARY or
+                event.type != Gdk.EventType.BUTTON_PRESS):
             return
 
         if not self.__file and song.is_file:
@@ -288,21 +315,32 @@ class CoverImage(Gtk.EventBox):
                                      qltk.get_top_parent(self), [song])
             return True
 
-        if self.__current_bci is not None:
-            # We're displaying it; destroy it.
-            self.__current_bci.destroy()
-            return True
+        # toggle
+        if current_id in BIG_IMAGES:
+            bci = BIG_IMAGES[current_id]
+            del BIG_IMAGES[current_id]
+            bci.destroy()
+            bci = None
+            return
+
+        # single image, close last
+        if not multiple_images and BIG_IMAGES:
+            bci = BIG_IMAGES[BIG_IMAGES.keys()[0]]
+            del BIG_IMAGES[bci.id]
+            bci.destroy()
+            bci = None
 
         if not self.__file:
             return False
 
+        bci = None
         try:
-            self.__current_bci = BigCenteredImage(
+            bci = BigCenteredImage(current_id,
                 song.comma("album"), self.__file, parent=self)
+            BIG_IMAGES[current_id] = bci
         except GLib.GError: # reload in case the image file is gone
             self.refresh()
         else:
-            self.__current_bci.show()
-            self.__current_bci.connect('destroy', self.__reset_bci)
+            bci.show()
 
         return True
