@@ -28,8 +28,10 @@ class BigCenteredImage(qltk.Window):
     This might leak memory, but it could just be Python's GC being dumb."""
 
     def __init__(self, title, fileobj, parent):
-        super(BigCenteredImage, self).__init__(type=Gtk.WindowType.POPUP)
+        super(BigCenteredImage, self).__init__()
         self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
+        self.set_skip_taskbar_hint(True)
+        self.set_decorated(False)
 
         assert parent
         parent = qltk.get_top_parent(parent)
