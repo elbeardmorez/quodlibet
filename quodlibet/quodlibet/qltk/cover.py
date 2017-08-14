@@ -207,7 +207,8 @@ class ResizeImage(Gtk.Bin):
                 return
             pixbuf = scale(
                 pixbuf, (width - 2 * scale_factor, height - 2 * scale_factor))
-            pixbuf = add_border_widget(pixbuf, self)
+            if pixbuf:
+                pixbuf = add_border_widget(pixbuf, self)
         else:
             pixbuf = scale(pixbuf, (width, height))
 
