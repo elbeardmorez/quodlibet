@@ -6,11 +6,13 @@
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
 
+import os
 from quodlibet.qltk.pluginwin import PluginWindow
 from quodlibet.plugins import PluginManager
 
 from quodlibet import config
 from quodlibet import _
+from quodlibet.util import print_d
 
 from quodlibet.qltk import get_top_parent
 from quodlibet.qltk import Icons
@@ -143,6 +145,36 @@ class WidgetBar(Gtk.Expander):
     def __destroy(self, *args):
         # no guarantee that this will be called -> :(
         self.__save()
+
+    @staticmethod
+    def read_datafile(pathfile, item_lines):
+        items = []
+        try:
+            if os.path.exists(pathfile):
+                fileobj = open(pathfile, "rU")
+                lines = list(fileobj.readlines())
+                for i in range(len(lines) // item_lines):
+                    item = []
+                    for ii in range(item_lines):
+                        item.append(lines[i * item_lines + ii].strip())
+                    items.append(item)
+        except:
+            print_d("error reading datafile %r" % pathfile)
+
+        return items
+
+    @staticmethod
+    def write_datafile(pathfile, iterable, cb):
+        try:
+            if not os.path.isdir(os.path.dirname(pathfile)):
+                os.makedirs(os.path.dirname(pathfile))
+            with open(pathfile, "w") as saved:
+                for i in iterable:
+                    arr = cb(i)
+                    for ii in arr:
+                        saved.write(ii + "\n")
+        except:
+            print_d("error writing datafile %r" % pathfile)
 
     def __save(self):
         config.set("plugins", self.id + "_size", self.panelock.size)

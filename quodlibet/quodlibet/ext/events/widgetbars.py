@@ -65,7 +65,7 @@ class WidgetBars(EventPlugin):
         entries = [
             (CONFIG.pane_order,
              _("Pane order"),
-             "e.g. main,playbar",
+             "e.g. main,playbar,coverswidgetbar",
              self.__pane_order_changed),
         ]
         for text, label, tooltip, changed_cb in entries:
