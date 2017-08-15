@@ -215,7 +215,14 @@ class ResizeImage(Gtk.Bin):
         style_context = self.get_style_context()
 
         surface = get_surface_for_pixbuf(self, pixbuf)
-        Gtk.render_icon_surface(style_context, cairo_context, surface, 0, 0)
+        # centre the image on the surface via an offset. required when cover
+        # is set to resize as its container is then necessarily set to expand
+        # and fill which makes attempts at widget alignments futile - the
+        # surface is always the full allocatable size
+        xoffset = int(0.5 * (alloc.width - pixbuf.get_width()))
+        yoffset = int(0.5 * (alloc.height - pixbuf.get_height()))
+        Gtk.render_icon_surface(style_context, cairo_context, surface,
+                                xoffset, yoffset)
 
 
 class CoverImage(Gtk.EventBox):
