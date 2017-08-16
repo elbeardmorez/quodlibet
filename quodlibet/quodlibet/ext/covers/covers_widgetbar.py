@@ -27,6 +27,7 @@ from quodlibet.util import print_d
 from quodlibet.pattern import ArbitraryExtensionFileFromPattern
 from quodlibet.qltk.cover import CoverImage
 from quodlibet.util.thumbnails import get_thumbnail_folder
+from quodlibet.qltk.ccb import ConfigCheckButton
 
 
 plugin_id = "coverswidgetbar"
@@ -44,6 +45,7 @@ class Config(object):
     images_max = IntConfProp(_config, "images_max", 50)
     songs_save = IntConfProp(_config, "songs_save", 10)
     ignore_in_last = IntConfProp(_config, "ignore_in_last", 1)
+    follow_front = BoolConfProp(_config, "follow_front", True)
     songs_history = []
 
 
@@ -335,6 +337,7 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         if not self.live:
             return
         self.__coversbox.new_song(song)
+        self.__follow_front()
 
     def __save(self):
         print_d("saving config data")
@@ -360,6 +363,10 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
     def __ignore_in_last_changed(self, widget, *data):
         CONFIG.ignore_in_last = widget.get_numeric()
+
+    def __follow_front(self):
+        if CONFIG.follow_front:
+            self.__widgetbar.scroll.get_hadjustment().set_value(0)
 
     def PluginPreferences(self, window):
 
@@ -393,5 +400,24 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             spin_box.pack_start(spin_label_align, False, False, 0)
 
             box.pack_start(spin_box, True, True, 0)
+
+        # space
+        box.pack_start(Gtk.VBox(), False, True, 6)
+
+        # toggles
+        toggles = [
+            (plugin_id + '_follow_front', _("Follow front of covers list"),
+             None, False,
+             lambda w, *x: self.__follow_front())
+        ]
+
+        for key, label, tooltip, default, changed_cb in toggles:
+            ccb = ConfigCheckButton(label, 'plugins', key,
+                                    populate=True)
+            ccb.connect("toggled", changed_cb)
+            if tooltip:
+                ccb.set_tooltip_text(tooltip)
+
+            box.pack_start(ccb, True, True, 0)
 
         return box
