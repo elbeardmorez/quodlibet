@@ -44,8 +44,8 @@ class TImageUtils(TestCase):
         s.failUnlessEqual((ns.get_width(), ns.get_height()), (10, 20))
 
     def test_calc_scale_size(self):
-        self.assertRaises(ValueError,
-                          calc_scale_size, (1, 1), (1, 0))
+        res = calc_scale_size((1, 1), (1, 0)) # illegal
+        self.assertEquals(res, (1, 1)) # default
         res = calc_scale_size((100, 100), (500, 100))
         self.assertEqual(res, (100, 20))
 

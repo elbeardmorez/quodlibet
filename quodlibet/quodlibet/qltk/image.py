@@ -149,7 +149,7 @@ def calc_scale_size(boundary, size, scale_up=True):
     iwidth, iheight = size
 
     if bwidth <= 0 or bheight <= 0 or iwidth <= 0 or iheight <= 0:
-        raise ValueError
+        return 1, 1 # ensure validity without erroring. likely an initial state
 
     scale_w, scale_h = iwidth, iheight
 
