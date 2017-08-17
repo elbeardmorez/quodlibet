@@ -46,6 +46,8 @@ class Config(object):
     songs_save = IntConfProp(_config, "songs_save", 10)
     ignore_in_last = IntConfProp(_config, "ignore_in_last", 1)
     follow_front = BoolConfProp(_config, "follow_front", True)
+    name_in_label = BoolConfProp(_config, "name_in_label", True)
+    size_in_label = BoolConfProp(_config, "size_in_label", False)
     songs_history = []
 
 
@@ -135,7 +137,10 @@ class CoversBox(Gtk.HBox):
 
             coverimage_box.pack_start(coverimage, True, True, 0)
 
-            desc = title + " [" + name + "] [" + size + "]"
+            desc = str.format("%s%s%s") % (
+                title,
+                " [" + name + "]" if CONFIG.name_in_label else "",
+                " [" + size + "]" if CONFIG.size_in_label else "")
 
             label_desc = Gtk.Label(desc)
             label_desc.set_line_wrap(True)
@@ -296,6 +301,14 @@ class CoversBox(Gtk.HBox):
 
         return fbytes == ibytes
 
+    def update_labels(self):
+        for box in self.get_children():
+            box.label.set_text("%s%s%s" % (
+                box.image_title,
+                " [" + box.image_name + "]" if CONFIG.name_in_label else "",
+                " [" + box.image_size + "]" if CONFIG.size_in_label else ""))
+            box.label.set_use_markup(True)
+
 
 class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -408,7 +421,11 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         toggles = [
             (plugin_id + '_follow_front', _("Follow front of covers list"),
              None, False,
-             lambda w, *x: self.__follow_front())
+             lambda w, *x: self.__follow_front()),
+            (plugin_id + '_name_in_label', _("Show image name in label"),
+             None, False, lambda *x: self.__coversbox.update_labels()),
+            (plugin_id + '_size_in_label', _("Show image size in label"),
+             None, False, lambda *x: self.__coversbox.update_labels()),
         ]
 
         for key, label, tooltip, default, changed_cb in toggles:
