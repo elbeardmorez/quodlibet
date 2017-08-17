@@ -48,6 +48,7 @@ class Config(object):
     follow_front = BoolConfProp(_config, "follow_front", True)
     name_in_label = BoolConfProp(_config, "name_in_label", True)
     size_in_label = BoolConfProp(_config, "size_in_label", False)
+    size_in_tooltip = BoolConfProp(_config, "size_in_tooltip", True)
     songs_history = []
 
 
@@ -136,6 +137,9 @@ class CoversBox(Gtk.HBox):
             coverimage_box.image_name = name
 
             coverimage_box.pack_start(coverimage, True, True, 0)
+
+            if CONFIG.size_in_tooltip:
+                coverimage.set_tooltip_markup(size)
 
             desc = str.format("%s%s%s") % (
                 title,
@@ -309,6 +313,13 @@ class CoversBox(Gtk.HBox):
                 " [" + box.image_size + "]" if CONFIG.size_in_label else ""))
             box.label.set_use_markup(True)
 
+    def update_tooltips(self):
+        for box in self.get_children():
+            if CONFIG.size_in_tooltip:
+                box.image.set_tooltip_markup(box.image_size)
+            else:
+                box.image.set_tooltip_markup(None)
+
 
 class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -426,6 +437,8 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
              None, False, lambda *x: self.__coversbox.update_labels()),
             (plugin_id + '_size_in_label', _("Show image size in label"),
              None, False, lambda *x: self.__coversbox.update_labels()),
+            (plugin_id + '_size_in_tooltip', _("Show image size in tooltip"),
+             None, True, lambda *x: self.__coversbox.update_tooltips()),
         ]
 
         for key, label, tooltip, default, changed_cb in toggles:
