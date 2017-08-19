@@ -162,20 +162,22 @@ class CBESEditor(_KeyValueEditor):
         self.value.set_text(cbes.get_child().get_text())
 
     def fill_values(self):
-        for row in self.cbes.get_model():
+        for row in self.cbes.model_filter:
             if row[2] is not None:
                 break
             else:
                 self.model.append((row[0], row[1]))
 
     def __finish(self, cbes):
-        cbes_model = cbes.get_model()
-        iter = cbes_model.get_iter_first()
-        while cbes_model[iter][2] is None:
-            cbes_model.remove(iter)
-            iter = cbes_model.get_iter_first()
+        iter = cbes.model_filter.get_iter_first()
+        while cbes.model_filter[iter][2] is None:
+            iter_store = cbes.model_filter.convert_iter_to_child_iter(iter)
+            cbes.model_store.remove(iter_store)
+            iter = cbes.model_filter.get_iter_first()
+        iter_store = cbes.model_filter.convert_iter_to_child_iter(iter)
         for row in self.model:
-            cbes_model.insert_before(iter, row=[row[0], row[1], None])
+            cbes.model_store.insert_before(
+                iter_store, row=[row[0], row[1], None])
         cbes.write()
 
 
@@ -262,18 +264,22 @@ class ComboBoxEntrySave(Gtk.ComboBox):
 
     def __init__(self, filename=None, initial=[], count=5, id=None,
                  validator=None, title=_("Saved Values"),
-                 edit_title=_(u"Edit saved values…")):
+                 edit_title=_(u"Edit saved values…"),
+                 filter=lambda *x: True, filter_data=None):
         self.count = count
         self.filename = filename
         id = filename or id
 
         try:
-            model = self.__models[id]
+            self.model_store = self.__models[id]
         except KeyError:
-            model = type(self).__models[id] = Gtk.ListStore(str, str, str)
+            self.model_store = \
+            type(self).__models[id] = \
+                Gtk.ListStore(str, str, str)
 
         super(ComboBoxEntrySave, self).__init__(
-            model=model, entry_text_column=0, has_entry=True)
+            model=self.model_store, entry_text_column=0, has_entry=True)
+
         self.clear()
 
         render = Gtk.CellRendererPixbuf()
@@ -286,8 +292,12 @@ class ComboBoxEntrySave(Gtk.ComboBox):
 
         self.set_row_separator_func(self.__separator_func, None)
 
-        if not len(model):
+        if not len(self.model_store):
             self.__fill(filename, initial, edit_title)
+
+        self.model_filter = self.model_store.filter_new()
+        self.model_filter.set_visible_func(filter, filter_data)
+        self.set_model(self.model_filter)
 
         old_entry = self.get_child()
         new_entry = entry.ValidatingEntry(validator)
@@ -296,7 +306,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
         self.add(new_entry)
 
         connect_obj(self, 'destroy', self.set_model, None)
-        connect_obj(self, 'changed', self.__changed, model,
+        connect_obj(self, 'changed', self.__changed, self.model_filter,
             validator, title)
 
     def enable_clear_button(self):
@@ -305,7 +315,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
     def __changed(self, model, validator, title):
         iter = self.get_active_iter()
         if iter:
-            if model[iter][2]:
+            if self.model_filter[iter][2]:
                 self.get_child().set_text(self.__last)
                 win = CBESEditor(self, title, validator)
                 win.show()
@@ -323,7 +333,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
                               Gtk.MovementStep.BUFFER_ENDS, 0, False)
 
     def __fill(self, filename, initial, edit_title):
-        model = self.get_model()
+        model = self.model_store
         model.append(row=["", edit_title, Icons.DOCUMENT_PROPERTIES])
         model.append(row=[None, None, None])
 
@@ -353,7 +363,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
         return model[iter][1] is None
 
     def __shorten(self):
-        model = self.get_model()
+        model = self.model_store
         for row in model:
             if row[0] is None:
                 offset = row.path.get_indices()[0] + 1
@@ -376,7 +386,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
             with open(filename + ".saved", "w", encoding="utf-8") as saved:
                 with open(filename, "w", encoding="utf-8") as memory:
                     target = saved
-                    for row in self.get_model():
+                    for row in self.model_store:
                         if row[0] is None:
                             target = memory
                         elif row[2] is None:
@@ -390,7 +400,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
         # Removes an item from the list if it's present in the remembered
         # values, or returns true if it's in the saved values.
         removable = False
-        model = self.get_model()
+        model = self.model_store
         for row in model:
             if row[0] is None:
                 # Not found in the saved values, so if we find it from now
@@ -408,7 +418,7 @@ class ComboBoxEntrySave(Gtk.ComboBox):
         if self.__remove_if_present(text):
             return
 
-        model = self.get_model()
+        model = self.model_store
         for row in model:
             if row[0] is None:
                 model.insert_after(row.iter, row=[text, text, None])

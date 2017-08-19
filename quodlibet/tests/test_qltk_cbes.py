@@ -27,10 +27,12 @@ class TComboBoxEntrySave(TestCase):
             f.write(self.saved)
         self.cbes = ComboBoxEntrySave(self.fname, count=2)
         self.cbes2 = ComboBoxEntrySave(self.fname, count=2)
+        self.cbes3 = ComboBoxEntrySave(self.fname, count=2,
+            filter=lambda ls, it, *d: ls.get_value(it, 0) == "filter")
 
     def test_equivalence(self):
-        model1 = self.cbes.get_model()
-        model2 = self.cbes2.get_model()
+        model1 = self.cbes.model_store
+        model2 = self.cbes2.model_store
         self.failUnlessEqual(model1, model2)
 
         rows1 = list(model1)
@@ -67,7 +69,7 @@ class TComboBoxEntrySave(TestCase):
         self.test_equivalence()
 
     def test_initial_size(self):
-        # 1 saved, Edit, separator, 2 remembered
+        # 1 saved, Edit, separator, 3 remembered
         self.failUnlessEqual(len(self.cbes.get_model()), 5)
 
     def test_prepend_text(self):
@@ -86,9 +88,14 @@ class TComboBoxEntrySave(TestCase):
         self.memory = "foobar\npattern 1\n"
         self.test_save()
 
+    def test_filter(self):
+        self.cbes3.prepend_text("filter")
+        self.failUnlessEqual(1, len(self.cbes3.get_model()))
+
     def tearDown(self):
         self.cbes.destroy()
         self.cbes2.destroy()
+        self.cbes3.destroy()
         os.unlink(self.fname)
         os.unlink(self.fname + ".saved")
         quodlibet.config.quit()
