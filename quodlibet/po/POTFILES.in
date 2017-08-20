@@ -154,6 +154,7 @@ quodlibet/player/gstbe/util.py
 quodlibet/player/__init__.py
 quodlibet/player/xinebe/player.py
 quodlibet/plugins/__init__.py
+quodlibet/plugins/actions.py
 quodlibet/plugins/playlist.py
 quodlibet.py
 quodlibet/qltk/about.py
