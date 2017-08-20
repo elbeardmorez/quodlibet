@@ -304,6 +304,12 @@ class PluginManager(GObject.GObject):
 
         return [p for p in self._plugins if p.handlers]
 
+    @property
+    def modules(self):
+        """Returns a list of modules in the plugins folders"""
+
+        return self._modules
+
     def register_handler(self, handler):
         """
         Registers a handler, attaching it to any current plugins it
