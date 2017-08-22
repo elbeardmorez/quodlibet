@@ -88,6 +88,8 @@ class PluginActionSelector(qltk.Window, PersistentWindowMixin):
         dragdrop_box.pack_end(self.__dragdrop_cbes, True, True, 2)
         box.pack_start(dragdrop_box, True, True, 5)
 
+        dragdrop_box.set_sensitive(False)
+
         self.connect('destroy', self.__destroy)
 
         self.show_all()
