@@ -48,6 +48,7 @@ class Config(object):
     sort_order = ConfProp(_config, "sort_order", "")
     enabled_only = BoolConfProp(_config, "enabled_only", True)
     show_labels = BoolConfProp(_config, "show_labels", True)
+    small_icons = BoolConfProp(_config, "small_icons", False)
 
 
 CONFIG = Config()
@@ -440,8 +441,11 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             plugin_box_align = Align(left=4, right=4)
             plugin_box_align.add(plugin_box_inner)
 
+            icon_size = Gtk.IconSize.SMALL_TOOLBAR \
+                            if CONFIG.small_icons \
+                            else Gtk.IconSize.LARGE_TOOLBAR
             plugin_icon_image = Gtk.Image.new_from_icon_name(
-                p.icon or Icons.SYSTEM_RUN, Gtk.IconSize.LARGE_TOOLBAR)
+                p.icon or Icons.SYSTEM_RUN, icon_size)
             plugin_icon_image.set_tooltip_markup(
                 _("name") + (": %s\nid: %s" % (name, p.id)))
             padding = 10 if CONFIG.show_labels else 5
@@ -568,6 +572,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             (plugin_id + '_enabled_only', _("Show only _enabled plugins"),
              None, True, lambda w: self.__update_plugins(), 0),
             (plugin_id + '_show_labels', _("Show labels"),
+             None, True, lambda w: self.__update_plugins(), 0),
+            (plugin_id + '_small_icons', _("Use small icons"),
              None, True, lambda w: self.__update_plugins(), 0),
         ]
         for key, label, tooltip, default, changed_cb, indent in toggles:
