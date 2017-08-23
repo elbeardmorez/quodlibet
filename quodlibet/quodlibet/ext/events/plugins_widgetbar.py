@@ -47,6 +47,7 @@ class Config(object):
     filter_negative = ConfProp(_config, "filter_negative", "")
     sort_order = ConfProp(_config, "sort_order", "")
     enabled_only = BoolConfProp(_config, "enabled_only", True)
+    show_labels = BoolConfProp(_config, "show_labels", True)
 
 
 CONFIG = Config()
@@ -443,18 +444,20 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
                 p.icon or Icons.SYSTEM_RUN, Gtk.IconSize.LARGE_TOOLBAR)
             plugin_icon_image.set_tooltip_markup(
                 _("name") + (": %s\nid: %s" % (name, p.id)))
+            padding = 10 if CONFIG.show_labels else 5
             plugin_icon_align = \
-                Align(left=5, right=5, top=0, bottom=0)
+                Align(left=padding, right=padding, top=0, bottom=0)
             plugin_icon_align.add(plugin_icon_image)
             # click action
             plugin_box_events.connect('button-press-event',
                                       self.__plugin_action_click, p)
             plugin_box_inner.pack_start(plugin_icon_align, True, True, 0)
 
-            plugin_label = Gtk.Label(p.name)
-            plugin_label.set_line_wrap(True)
-            plugin_label.set_use_markup(True)
-            plugin_box_inner.pack_start(plugin_label, True, True, 2)
+            if CONFIG.show_labels:
+                plugin_label = Gtk.Label(p.name)
+                plugin_label.set_line_wrap(True)
+                plugin_label.set_use_markup(True)
+                plugin_box_inner.pack_start(plugin_label, True, True, 2)
 
             plugin_box_outer.pack_start(plugin_box_align, True, False, 0)
 
@@ -563,6 +566,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         # toggles
         toggles = [
             (plugin_id + '_enabled_only', _("Show only _enabled plugins"),
+             None, True, lambda w: self.__update_plugins(), 0),
+            (plugin_id + '_show_labels', _("Show labels"),
              None, True, lambda w: self.__update_plugins(), 0),
         ]
         for key, label, tooltip, default, changed_cb, indent in toggles:
