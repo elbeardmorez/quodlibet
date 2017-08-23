@@ -25,6 +25,7 @@ from quodlibet.qltk.entry import UndoEntry
 from quodlibet.qltk.x import Align
 from quodlibet.qltk.widgetbar import WidgetBar
 from quodlibet.plugins.actions import PluginActionSelector
+from quodlibet.qltk.ccb import ConfigCheckButton
 
 
 plugin_id = "pluginswidgetbar"
@@ -45,6 +46,7 @@ class Config(object):
     filter_positive = ConfProp(_config, "filter_positive", "")
     filter_negative = ConfProp(_config, "filter_negative", "")
     sort_order = ConfProp(_config, "sort_order", "")
+    enabled_only = BoolConfProp(_config, "enabled_only", True)
 
 
 CONFIG = Config()
@@ -85,9 +87,17 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         # override title
         self.__widgetbar.title.set_text(self.PLUGIN_NAME)
         # populate widgetbar content
+        label_box_align = Gtk.Alignment(yalign=0.5, yscale=0.0)
+        label_box = Gtk.VBox()
+        label_box_align.add(label_box)
+        self.__content_left.pack_start(label_box_align, False, False, 5)
+        self.__content_left.label = Gtk.Label("")
+        self.__content_left.label.set_alignment(0.0, 0.5)
+        label_box.pack_start(self.__content_left.label, False, False, 1)
         label = Gtk.Label("<b>Plugins:</b>")
         label.set_use_markup(True)
-        self.__content_left.pack_start(label, False, False, 5)
+        label.set_alignment(0.0, 0.5)
+        label_box.pack_start(label, False, False, 1)
         separator = Gtk.VSeparator()
         separator_align = Gtk.Alignment(yscale=0.8)
         separator_align.add(separator)
@@ -351,6 +361,12 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         if not self.live:
             return
 
+        self.__content_left.label.set_text(
+            "<b>%s</b>"
+            % (_(u'Enabled') if CONFIG.enabled_only else _(u'All')))
+        self.__content_left.label.set_use_markup(True)
+        self.__content_left.label.set_line_wrap(True)
+
         # sort and filter
 
         # condition maps
@@ -363,6 +379,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         filter_negative = {}
         if CONFIG.filter_negative:
             filter_negative = set(CONFIG.filter_negative.split(','))
+        enabled_only = CONFIG.enabled_only
 
         plugins_map = OrderedDict()
         plugins_map_first = OrderedDict()
@@ -370,6 +387,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
         # map plugins and discard disabled if required
         for p in pm.plugins:
+            if enabled_only and not pm.enabled(p):
+                continue
             if p.id in sort_order:
                 plugins_map_first[p.id] = p
             else:
@@ -540,5 +559,20 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             filter_box.pack_start(filter_label, False, True, 5)
             filter_box.pack_start(filter_entry, True, True, 0)
             box.pack_start(filter_box, True, True, 0)
+
+        # toggles
+        toggles = [
+            (plugin_id + '_enabled_only', _("Show only _enabled plugins"),
+             None, True, lambda w: self.__update_plugins(), 0),
+        ]
+        for key, label, tooltip, default, changed_cb, indent in toggles:
+            ccb = ConfigCheckButton(label, 'plugins', key,
+                                    populate=True)
+            ccb.connect("toggled", changed_cb)
+            if tooltip:
+                ccb.set_tooltip_text(tooltip)
+            ccb_align = Align(left=indent)
+            ccb_align.add(ccb)
+            box.pack_start(ccb_align, True, True, 0)
 
         return box
