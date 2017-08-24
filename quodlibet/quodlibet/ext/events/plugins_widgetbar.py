@@ -18,7 +18,7 @@ from quodlibet import _
 from quodlibet.plugins import PluginConfig, BoolConfProp, ConfProp
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.plugins.gui import UserInterfacePlugin
-from quodlibet.qltk.pluginwin import PluginWindow
+from quodlibet.qltk.pluginwin import PluginWindow, PluginErrorWindow
 from quodlibet.plugins import PluginManager
 from quodlibet.qltk import Icons
 from quodlibet.qltk.entry import UndoEntry
@@ -49,6 +49,7 @@ class Config(object):
     enabled_only = BoolConfProp(_config, "enabled_only", True)
     show_labels = BoolConfProp(_config, "show_labels", True)
     small_icons = BoolConfProp(_config, "small_icons", False)
+    enable_errors_icon = BoolConfProp(_config, "enable_errors_icon", True)
 
 
 CONFIG = Config()
@@ -423,51 +424,65 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         # clear container
         self.__content.foreach(lambda w: self.__content.remove(w))
         # (re)display icons
+        icon_size = self.__icon_size
         for p in plugins:
-            plugin_align = Align(bottom=15, top=2) # clear scroll
-            plugin_box_outer = Gtk.VBox()
-            plugin_box_events = Gtk.EventBox()
-            plugin_box_events.set_above_child(True)
-            plugin_box_events.add(plugin_box_outer)
-            plugin_align.add(plugin_box_events)
-
-            plugin_separator_box_align = Align(left=6, right=6)
-            plugin_separator_box_align.set_no_show_all(True)
-            plugin_separator_box_align.set_size_request(-1, 5)
-            plugin_separator_box = Gtk.VBox()
-            plugin_separator_box_align.add(plugin_separator_box)
-
-            plugin_box_inner = Gtk.VBox()
-            plugin_box_align = Align(left=4, right=4)
-            plugin_box_align.add(plugin_box_inner)
-
-            icon_size = Gtk.IconSize.SMALL_TOOLBAR \
-                            if CONFIG.small_icons \
-                            else Gtk.IconSize.LARGE_TOOLBAR
-            plugin_icon_image = Gtk.Image.new_from_icon_name(
-                p.icon or Icons.SYSTEM_RUN, icon_size)
-            plugin_icon_image.set_tooltip_markup(
-                _("name") + (": %s\nid: %s" % (name, p.id)))
-            padding = 10 if CONFIG.show_labels else 5
-            plugin_icon_align = \
-                Align(left=padding, right=padding, top=0, bottom=0)
-            plugin_icon_align.add(plugin_icon_image)
-            # click action
-            plugin_box_events.connect('button-press-event',
-                                      self.__plugin_action_click, p)
-            plugin_box_inner.pack_start(plugin_icon_align, True, True, 0)
-
-            if CONFIG.show_labels:
-                plugin_label = Gtk.Label(p.name)
-                plugin_label.set_line_wrap(True)
-                plugin_label.set_use_markup(True)
-                plugin_box_inner.pack_start(plugin_label, True, True, 2)
-
-            plugin_box_outer.pack_start(plugin_box_align, True, False, 0)
-
-            self.__content.pack_start(plugin_align, False, False, 0)
+            plugin_box = self.__icon_box(p.name, p.id, pm.enabled(p),
+                                         p.icon, icon_size,
+                                         self.__plugin_action_click, p,
+                                         self.__plugin_action_dragdrop, p)
+            self.__content.pack_start(plugin_box, False, False, 0)
 
         self.__content.show_all()
+
+        self.__update_errors_icon()
+
+    def __icon_box(self, name, id, enabled, icon, icon_size,
+                   click_cb, click_cb_data, dragdrop_cb, dragdrop_cb_data,
+                   show_tooltip=True, show_label=None):
+
+        if not show_label:
+            show_label = CONFIG.show_labels
+
+        plugin_align = Align(bottom=15, top=2) # clear scroll
+        plugin_box_outer = Gtk.VBox()
+        plugin_box_events = Gtk.EventBox()
+        plugin_box_events.set_above_child(True)
+        plugin_box_events.add(plugin_box_outer)
+        plugin_align.add(plugin_box_events)
+
+        plugin_separator_box_align = Align(left=6, right=6)
+        plugin_separator_box_align.set_no_show_all(True)
+        plugin_separator_box_align.set_size_request(-1, 5)
+        plugin_separator_box = Gtk.VBox()
+        plugin_separator_box_align.add(plugin_separator_box)
+
+        plugin_box_inner = Gtk.VBox()
+        plugin_box_align = Align(left=4, right=4)
+        plugin_box_align.add(plugin_box_inner)
+
+        plugin_icon_image = Gtk.Image.new_from_icon_name(
+            icon or Icons.SYSTEM_RUN, icon_size)
+        if show_tooltip:
+            plugin_icon_image.set_tooltip_markup(
+                _("name") + (": %s\nid: %s" % (name, id)))
+        padding = 10 if CONFIG.show_labels else 5
+        plugin_icon_align = \
+            Align(left=padding, right=padding, top=0, bottom=0)
+        plugin_icon_align.add(plugin_icon_image)
+        # click action
+        plugin_box_events.connect('button-press-event',
+                                  click_cb, click_cb_data)
+        plugin_box_inner.pack_start(plugin_icon_align, True, True, 0)
+
+        if show_label:
+            plugin_label = Gtk.Label(name)
+            plugin_label.set_line_wrap(True)
+            plugin_label.set_use_markup(True)
+            plugin_box_inner.pack_start(plugin_label, True, True, 2)
+
+        plugin_box_outer.pack_start(plugin_box_align, True, False, 0)
+
+        return plugin_align
 
     def __read_actions(self):
         items = self.__widgetbar.read_datafile(CLICK_ACTION_SET, 2)
@@ -534,6 +549,30 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         if persist:
             self.__write_actions()
 
+    def __show_errors(self):
+        pm = PluginManager.instance
+        window = PluginErrorWindow(
+                     get_top_parent(self.__content_right), pm.failures)
+        window.show()
+
+    def __update_errors_icon(self):
+        self.__content_right.foreach(
+            lambda w: self.__content_right.remove(w))
+        if CONFIG.enable_errors_icon:
+            self.__content_right.pack_start(
+                self.__icon_box(
+                    "Show Errors", "", False, Icons.DIALOG_WARNING,
+                    self.__icon_size, lambda *x: self.__show_errors(),
+                    None, None, None),
+                False, False, 5)
+            self.__content_right.show_all()
+
+    @property
+    def __icon_size(self):
+        return Gtk.IconSize.SMALL_TOOLBAR \
+                   if CONFIG.small_icons \
+                   else Gtk.IconSize.LARGE_TOOLBAR
+
     def PluginPreferences(self, window):
 
         box = Gtk.VBox(spacing=6)
@@ -575,6 +614,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
              None, True, lambda w: self.__update_plugins(), 0),
             (plugin_id + '_small_icons', _("Use small icons"),
              None, True, lambda w: self.__update_plugins(), 0),
+            (plugin_id + '_enable_errors_icon', _("Enable errors window icon"),
+             None, True, lambda w: self.__update_errors_icon(), 0),
         ]
         for key, label, tooltip, default, changed_cb, indent in toggles:
             ccb = ConfigCheckButton(label, 'plugins', key,
