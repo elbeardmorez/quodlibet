@@ -17,6 +17,7 @@ from quodlibet.plugins.songshelpers import is_a_file, each_song
 from quodlibet.util.path import iscommand
 from quodlibet.qltk import Icons
 from quodlibet.util import connect_obj
+from quodlibet.util import print_d
 
 
 class BurnCD(SongsMenuPlugin):
@@ -55,10 +56,21 @@ class BurnCD(SongsMenuPlugin):
     def __set(self, name):
         self.prog_name = name
 
-    def plugin_songs(self, songs):
-        if self.prog_name is None:
+    def plugin_songs(self, songs, prog_name=None):
+
+        if not songs:
             return
 
-        args, reverse = self.burn_programs[self.prog_name]
+        burn_program = self.prog_name
+        if not burn_program and prog_name:
+            burn_program = \
+                next((key for key in self.burn_programs.keys()
+                        if key.lower() == prog_name.lower()), None)
+
+        if not burn_program:
+            print_d("no burning program set")
+            return
+
+        args, reverse = self.burn_programs[burn_program]
         songs = sorted(songs, key=lambda s: s.sort_key, reverse=reverse)
         util.spawn(args + [song['~filename'] for song in songs])
