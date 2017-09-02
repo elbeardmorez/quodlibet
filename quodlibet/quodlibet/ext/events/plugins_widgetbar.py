@@ -449,7 +449,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
     def __icon_box(self, name, id, enabled, icon, icon_size,
                    click_cb, click_cb_data, dragdrop_cb, dragdrop_cb_data,
-                   show_tooltip=True, show_label=None, highlight_enabled=None,                    highlight_below=None):
+                   show_tooltip=True, show_label=None, highlight_enabled=None,
+                   highlight_below=None):
         if not show_label:
             show_label = CONFIG.show_labels
         if not highlight_enabled:
@@ -597,18 +598,20 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
                    if CONFIG.small_icons \
                    else Gtk.IconSize.LARGE_TOOLBAR
 
+    def __highlight_enabled_changed(self):
+        self.__update_preferences_controls()
+        self.__update_plugins()
+
+    def __update_preferences_controls(self):
+        self.__preferences_controls['highlight_below'].\
+            set_sensitive(CONFIG.highlight_enabled)
+
     def PluginPreferences(self, window):
 
-        controls = {}
+        # lambdas and closures are utterly broken with pygtk
+        # what appears to work fine fails with 'sink' tests
+        self.__preferences_controls = {}
         box = Gtk.VBox(spacing=6)
-
-        def update_controls():
-            controls['highlight_below'].\
-                set_sensitive(CONFIG.highlight_enabled)
-
-        def highlight_enabled_changed(self):
-            update_controls()
-            self.__update_plugins()
 
         # filters
         filters = [
@@ -642,18 +645,18 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         # toggles
         toggles = [
             (plugin_id + '_enabled_only', _("Show only _enabled plugins"),
-             None, True, lambda w: self.__update_plugins(), 0),
+             None, True, lambda w, self=self: self.__update_plugins(), 0),
             (plugin_id + '_show_labels', _("Show labels"),
-             None, True, lambda w: self.__update_plugins(), 0),
+             None, True, lambda w, self=self: self.__update_plugins(), 0),
             (plugin_id + '_small_icons', _("Use small icons"),
-             None, True, lambda w: self.__update_plugins(), 0),
+             None, True, lambda w, self=self: self.__update_plugins(), 0),
             (plugin_id + '_enable_errors_icon', _("Enable errors window icon"),
-             None, True, lambda w: self.__update_errors_icon(), 0),
+             None, True, lambda w, self=self: self.__update_errors_icon(), 0),
             (plugin_id + '_highlight_enabled', _("Highlight enabled plugins"),
-             None, True,
-             lambda w, s=self, f=highlight_enabled_changed: f(s), 0),
+             None, True, lambda w, self=self:
+                             self.__highlight_enabled_changed(), 0),
             (plugin_id + '_highlight_below', _("Highlights below icons"),
-             None, True, lambda w: self.__update_plugins(), 15),
+             None, True, lambda w, self=self: self.__update_plugins(), 15),
         ]
         for key, label, tooltip, default, changed_cb, indent in toggles:
             ccb = ConfigCheckButton(label, 'plugins', key,
@@ -664,8 +667,9 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             ccb_align = Align(left=indent)
             ccb_align.add(ccb)
             box.pack_start(ccb_align, True, True, 0)
-            controls[key.replace(plugin_id, "").strip("_")] = ccb
+            self.__preferences_controls[
+                key.replace(plugin_id, "").strip("_")] = ccb
 
-        update_controls()
+        self.__update_preferences_controls()
 
         return box
