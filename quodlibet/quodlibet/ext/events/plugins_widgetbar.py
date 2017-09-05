@@ -30,6 +30,7 @@ from quodlibet.qltk.ccb import ConfigCheckButton
 
 plugin_id = "pluginswidgetbar"
 
+DND_QL_PLUGIN = 1
 
 CLICK_ACTION_SET = \
     os.path.join(quodlibet.get_user_dir(),
@@ -57,7 +58,121 @@ class Config(object):
 CONFIG = Config()
 
 
-class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
+class PluginsWidgetBarPluginDnDMixin(object):
+    """DnD support for the PluginsWidgetbarPlugin class"""
+
+    def setup_drop(self, widget):
+        widget.connect('button-press-event', self.__click, widget)
+        widget.connect('drag-begin', self.__drag_begin, widget)
+        widget.connect('drag-motion', self.__drag_motion)
+        widget.connect('drag-data-get', self.__drag_data_get)
+        widget.connect('drag-data-received', self.__drag_data_received)
+
+        targets = [
+            ("text/x-quodlibet-plugin",
+                 Gtk.TargetFlags.SAME_APP, DND_QL_PLUGIN),
+        ]
+        targets = [Gtk.TargetEntry.new(*t) for t in targets]
+        widget.drag_source_set(
+            Gdk.ModifierType.BUTTON1_MASK, targets,
+            Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+        widget.drag_dest_set(
+            Gtk.DestDefaults.MOTION | Gtk.DestDefaults.DROP, targets,
+            Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+
+    def disable_drop(self, widget):
+        targets = [
+            ("text/x-quodlibet-plugin",
+                 Gtk.TargetFlags.SAME_APP, DND_QL_PLUGIN),
+        ]
+        targets = [Gtk.TargetEntry.new(*t) for t in targets]
+        widget.drag_source_set(
+            Gdk.ModifierType.BUTTON1_MASK, targets, Gdk.DragAction.COPY)
+        widget.drag_dest_unset()
+
+    def __click(self, *args):
+        self._dragged = False
+
+    def __drag_begin(self, widget, drag_ctx, source):
+        self._dragged = True
+
+        # widget geometry
+        window = widget.drag_widget.get_window()
+        width = window.get_geometry()[2]
+        height = window.get_geometry()[3]
+
+        # widget snapshot
+        pb = Gdk.pixbuf_get_from_window(window, 0, 0, width, height)
+        Gtk.drag_set_icon_pixbuf(drag_ctx, pb, 0, 0)
+
+        ok, state = Gtk.get_current_event_state()
+
+    def __drag_motion(self, widget, ctx, x, y, time):
+
+        if hasattr(Gtk.drag_get_source_widget(ctx), 'drag_widget'):
+            self.__drag_side = round(float(x) / widget.get_allocation().width)
+
+        Gdk.drag_status(ctx, Gdk.DragAction.COPY, time)
+
+        return True
+
+    def __drag_data_get(self, widget, ctx, data, tid, etime):
+
+        if tid == DND_QL_PLUGIN:
+            type_ = Gdk.atom_intern("text/x-quodlibet-plugin", True)
+            data.set(type_, 8, widget.drag_widget.id)
+
+        return True
+
+    def __drag_data_received(self, widget, ctx, x, y, data, info, etime):
+
+        if info == DND_QL_PLUGIN:
+            target = widget.drag_widget.id
+            source = data.get_data()
+#            side_desc = "left" if self.__drag_side == 0 else "right"
+#            print_d("moving %r to %s of %r" % (source, side_desc, target))
+
+            # to try and ensure the sorted list isn't just a complete list we
+            # only care about a move in relation to existing ordered items.
+            # hence consequently, if you've only ordered 3 of 10 items, and
+            # move pos 4 to pos 10, it will not do anything! you would have to
+            # explicitly move others items (5 to 10) in front of it in order
+            # to push it out to position 10. also, moving item 10 to position
+            # 9 will thus push the item all the way to position 4. this might
+            # look like broken behaviour, but only when shuffling around
+            # previously unordered items. a benefit here would be trying to
+            # order item 999 down to position 2, no excessive drag operation
+            # would be needed, scroll to 999, move it 1 position, and it'll
+            # pop to the end of the sorted items (i.e. near the front of the
+            # full list)
+            sort_order = []
+            sort_order_orig = CONFIG.sort_order.split(',')
+            shuffled = False
+            for s in sort_order_orig:
+                if s == source:
+                    pass
+                elif s == target:
+                    shuffled = True
+                    if self.__drag_side == 0:
+                        sort_order.append(source)
+                        sort_order.append(s)
+                    else:
+                        sort_order.append(s)
+                        sort_order.append(source)
+                else:
+                    sort_order.append(s)
+            if not shuffled:
+                sort_order.append(source)
+
+            CONFIG.sort_order = ",".join(sort_order)
+            self._update()
+
+        Gtk.drag_finish(ctx, True, False, etime)
+        return
+
+
+class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
+                             PluginsWidgetBarPluginDnDMixin):
     """The plugin class."""
 
     PLUGIN_ID = "pluginswidgetbar"
@@ -70,8 +185,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         super(PluginsWidgetBarPlugin, self).__init__()
         self.live = False
         self.__target_elements = {}
-        self.__song_playing = None
-        self.__songs_selected = None
+        self._song_playing = None
+        self._songs_selected = None
 
     def enabled(self):
         # setup
@@ -119,24 +234,29 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
         self.live = True
 
+        self.__content.show_all()
         self.__update_plugins()
 
         return self.__widgetbar
 
     def plugin_on_song_started(self, song):
-        self.__song_playing = song
+        self._song_playing = song
 
     def plugin_on_song_ended(self, song, stopped):
-        self.__song_playing = None
+        self._song_playing = None
 
     def plugin_on_songs_selected(self, songs):
-        self.__songs_selected = songs
+        self._songs_selected = songs
 
     def plugin_on_plugin_toggled(self, plugin, enabled):
         # TODO: don't be so lazy
         self.__update_plugins()
 
     def __plugin_action_click(self, widget, event, plugin):
+
+        if self._dragged:
+            self._dragged = False
+            return
 
         if event.button == 3:
             self.__plugin_actions(plugin)
@@ -148,9 +268,9 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         # non-string arg lookup. add aliases here too
         args_set = {}
         args_set["library"] = args_set["librarian"] = app.library
-        args_set["songs"] = self.__songs_selected \
-                                if self.__songs_selected \
-                                    else [self.__song_playing]
+        args_set["songs"] = self._songs_selected \
+                                if self._songs_selected \
+                                    else [self._song_playing]
         args = []
 
         click_cb = ""
@@ -476,8 +596,10 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             plugin_separator_box_align.show()
 
         plugin_box_inner = Gtk.VBox()
-        plugin_box_align = Align(left=4, right=4)
+        plugin_box_align = Align(left=0, right=0, border=4)
         plugin_box_align.add(plugin_box_inner)
+        plugin_box_window = Gtk.EventBox()
+        plugin_box_window.add(plugin_box_align)
 
         plugin_icon_image = Gtk.Image.new_from_icon_name(
             icon or Icons.SYSTEM_RUN, icon_size)
@@ -489,7 +611,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             Align(left=padding, right=padding, top=0, bottom=0)
         plugin_icon_align.add(plugin_icon_image)
         # click action
-        plugin_box_events.connect('button-press-event',
+        plugin_box_events.connect('button-release-event',
                                   click_cb, click_cb_data)
         plugin_box_inner.pack_start(plugin_icon_align, True, True, 0)
 
@@ -502,10 +624,15 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         if not highlight_below:
             plugin_box_outer.pack_start(
                 plugin_separator_box_align, False, True, 0)
-        plugin_box_outer.pack_start(plugin_box_align, True, False, 0)
+        plugin_box_outer.pack_start(plugin_box_window, True, False, 0)
         if highlight_below:
             plugin_box_outer.pack_start(
                 plugin_separator_box_align, False, False, 4)
+
+        plugin_align.drag_widget = plugin_box_window
+        plugin_align.drag_widget.id = id
+
+        self.setup_drop(plugin_align)
 
         return plugin_align
 
@@ -605,6 +732,13 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     def __update_preferences_controls(self):
         self.__preferences_controls['highlight_below'].\
             set_sensitive(CONFIG.highlight_enabled)
+
+    @property
+    def widgetbar(self):
+        return self.__widgetbar
+
+    def _update(self):
+        self.__update_plugins()
 
     def PluginPreferences(self, window):
 
