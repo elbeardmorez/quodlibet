@@ -6,13 +6,14 @@
 # published by the Free Software Foundation
 
 import os
+import cairo
 from collections import OrderedDict
 from inspect import isclass, getargspec
 from gi.repository import Gtk, Gdk
 
 import quodlibet
 from quodlibet import app
-from quodlibet.qltk import get_top_parent
+from quodlibet.qltk import get_top_parent, gtk_version
 from quodlibet.util import print_d
 from quodlibet import _
 from quodlibet.plugins import PluginConfig, BoolConfProp, ConfProp
@@ -96,14 +97,46 @@ class PluginsWidgetBarPluginDnDMixin(object):
     def __drag_begin(self, widget, drag_ctx, source):
         self._dragged = True
 
-        # widget geometry
-        window = widget.drag_widget.get_window()
-        width = window.get_geometry()[2]
-        height = window.get_geometry()[3]
+        def drag_pixbuf(widget):
 
-        # widget snapshot
-        pb = Gdk.pixbuf_get_from_window(window, 0, 0, width, height)
-        Gtk.drag_set_icon_pixbuf(drag_ctx, pb, 0, 0)
+            # widget window
+            window = widget.get_window()
+
+            # widget geometry
+            width = window.get_geometry()[2]
+            height = window.get_geometry()[3]
+
+            # widget snapshot
+            pb = Gdk.pixbuf_get_from_window(window, 0, 0, width, height)
+
+            return pb
+
+        def drag_surface(widget):
+
+            # widget window
+            window = widget.get_window()
+
+            # widget snapshot
+            pb = drag_pixbuf(widget)
+
+            # cairo surface
+            surface = Gdk.cairo_surface_create_from_pixbuf(pb, 1.0, window)
+            # cairo context
+            ctx = cairo.Context(surface)
+
+            # alpha
+            ctx.set_operator(cairo.OPERATOR_OVER)
+            ctx.paint_with_alpha(0.5)
+
+            return surface
+
+        if hasattr(widget, 'drag_widget'):
+            if gtk_version >= (3, 10):
+                drag_surface = drag_surface(widget.drag_widget)
+                Gtk.drag_set_icon_surface(drag_ctx, drag_surface)
+            else:
+                drag_pixbuf = drag_pixbuf(widget.drag_widget)
+                Gtk.drag_set_icon_pixbuf(drag_ctx, drag_pixbuf, 0, 0)
 
         ok, state = Gtk.get_current_event_state()
 
