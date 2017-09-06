@@ -20,7 +20,9 @@ from quodlibet.qltk.menubutton import SmallMenuButton
 from quodlibet.qltk.x import ScrolledWindow, SymbolicIconImage, \
     SmallImageButton, MenuItem, PaneLock, ExpanderTitleContainerHack
 
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib
+
+SCROLL_AREA = 60
 
 
 class WidgetBar(Gtk.Expander):
@@ -141,6 +143,56 @@ class WidgetBar(Gtk.Expander):
             pm.enable(plugin, False)
             pm.save()
         self.__save()
+
+    def __scroll_size(self, offset):
+        if offset > SCROLL_AREA:
+            offset = SCROLL_AREA
+        change = round((float(offset) / SCROLL_AREA)**1.5)
+        if change <= 0:
+            change = 1
+#        print_d("scroll size offset %d, change %d" % (offset, change))
+        return change
+
+    def drag_scroll_setup(self):
+        self.__drag_scroll = True
+        self.__scrolling_size = 0
+
+    def drag_scroll_disable(self):
+        self.__drag_scroll = False
+        self.__scroll_callback_handle = None
+        self.__scrolling_size = 0
+
+    def drag_scroll(self, mouse_pos):
+
+        min_pos = SCROLL_AREA
+        max_pos = self.scroll.get_allocation().width - SCROLL_AREA
+
+        if not mouse_pos:
+            return
+
+        pos = mouse_pos[0]
+        if pos < min_pos or pos > max_pos:
+            self.__drag_scroll = True
+            self.__scroll_callback_handle = \
+                GLib.timeout_add(10, self.__scrolling)
+        else:
+            self.__drag_scroll = False
+
+        if pos < min_pos:
+            self.__scrolling_size = -1 * self.__scroll_size(min_pos - pos)
+        elif pos > max_pos:
+            self.__scrolling_size = self.__scroll_size(pos - max_pos)
+
+    def __scrolling(self):
+
+        if not self.__drag_scroll:
+            return False
+
+#        print_d("scrolling by %d" % self.__scrolling_size)
+        adj = self.scroll.get_hadjustment()
+        adj.set_value(adj.get_value() + self.__scrolling_size)
+
+        return True
 
     def __destroy(self, *args):
         # no guarantee that this will be called -> :(

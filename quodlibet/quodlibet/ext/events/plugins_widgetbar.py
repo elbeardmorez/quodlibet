@@ -65,6 +65,7 @@ class PluginsWidgetBarPluginDnDMixin(object):
     def setup_drop(self, widget):
         widget.connect('button-press-event', self.__click, widget)
         widget.connect('drag-begin', self.__drag_begin, widget)
+        widget.connect('drag-end', self.__drag_end, widget)
         widget.connect('drag-motion', self.__drag_motion)
         widget.connect('drag-data-get', self.__drag_data_get)
         widget.connect('drag-data-received', self.__drag_data_received)
@@ -96,6 +97,7 @@ class PluginsWidgetBarPluginDnDMixin(object):
 
     def __drag_begin(self, widget, drag_ctx, source):
         self._dragged = True
+        self.widgetbar.drag_scroll_setup()
 
         def drag_pixbuf(widget):
 
@@ -140,7 +142,14 @@ class PluginsWidgetBarPluginDnDMixin(object):
 
         ok, state = Gtk.get_current_event_state()
 
+    def __drag_end(self, widget, ctx, time):
+        self.widgetbar.drag_scroll_disable()
+
     def __drag_motion(self, widget, ctx, x, y, time):
+
+        mouse_pos = \
+            widget.translate_coordinates(self.widgetbar.scroll, x, y)
+        self.widgetbar.drag_scroll(mouse_pos)
 
         if hasattr(Gtk.drag_get_source_widget(ctx), 'drag_widget'):
             self.__drag_side = round(float(x) / widget.get_allocation().width)
