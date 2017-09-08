@@ -174,6 +174,10 @@ class PluginsWidgetBarPluginDnDMixin(object):
 #            side_desc = "left" if self.__drag_side == 0 else "right"
 #            print_d("moving %r to %s of %r" % (source, side_desc, target))
 
+            if target == source:
+                Gtk.drag_finish(ctx, True, False, etime)
+                return
+
             # to try and ensure the sorted list isn't just a complete list we
             # only care about a move in relation to existing ordered items.
             # hence consequently, if you've only ordered 3 of 10 items, and
