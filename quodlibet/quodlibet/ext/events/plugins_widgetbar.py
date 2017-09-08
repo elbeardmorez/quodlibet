@@ -67,6 +67,7 @@ class PluginsWidgetBarPluginDnDMixin(object):
         widget.connect('drag-begin', self.__drag_begin, widget)
         widget.connect('drag-end', self.__drag_end, widget)
         widget.connect('drag-motion', self.__drag_motion)
+        widget.connect('drag-leave', self.__drag_leave)
         widget.connect('drag-data-get', self.__drag_data_get)
         widget.connect('drag-data-received', self.__drag_data_received)
 
@@ -153,10 +154,14 @@ class PluginsWidgetBarPluginDnDMixin(object):
 
         if hasattr(Gtk.drag_get_source_widget(ctx), 'drag_widget'):
             self.__drag_side = round(float(x) / widget.get_allocation().width)
+            widget.drag_highlight(True, self.__drag_side)
 
         Gdk.drag_status(ctx, Gdk.DragAction.COPY, time)
 
         return True
+
+    def __drag_leave(self, widget, ctx, time):
+        widget.drag_highlight(False)
 
     def __drag_data_get(self, widget, ctx, data, tid, etime):
 
@@ -624,9 +629,25 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
 
         plugin_align = Align(bottom=15, top=2) # clear scroll
         plugin_box_outer = Gtk.VBox()
+        plugin_box_outer_highlight = Gtk.HBox()
+        highlight_left = Gtk.HBox()
+        highlight_left.set_size_request(2, -1)
+        highlight_left_align = Gtk.Alignment(xscale=1.0, yscale=0.65)
+        highlight_left_align.add(highlight_left)
+        highlight_right = Gtk.HBox()
+        highlight_right.set_size_request(2, -1)
+        highlight_right_align = Gtk.Alignment(xscale=1.0, yscale=0.65)
+        highlight_right_align.add(highlight_right)
+        plugin_box_outer_highlight.pack_start(
+            highlight_left_align, False, False, 0)
+        plugin_box_outer_highlight.pack_start(
+            plugin_box_outer, True, True, 0)
+        plugin_box_outer_highlight.pack_start(
+            highlight_right_align, False, False, 0)
+        plugin_separator_box = Gtk.HBox()
         plugin_box_events = Gtk.EventBox()
         plugin_box_events.set_above_child(True)
-        plugin_box_events.add(plugin_box_outer)
+        plugin_box_events.add(plugin_box_outer_highlight)
         plugin_align.add(plugin_box_events)
 
         plugin_separator_box_align = Align(left=6, right=6)
@@ -677,6 +698,22 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
 
         plugin_align.drag_widget = plugin_box_window
         plugin_align.drag_widget.id = id
+
+        def drag_highlight(enable, side=None):
+            lsc = highlight_left.get_style_context()
+            rsc = highlight_right.get_style_context()
+            if enable:
+                if side == 0:
+                    rsc.remove_class('highlightbox')
+                    lsc.add_class('highlightbox')
+                else:
+                    lsc.remove_class('highlightbox')
+                    rsc.add_class('highlightbox')
+            else:
+                lsc.remove_class('highlightbox')
+                rsc.remove_class('highlightbox')
+
+        plugin_align.drag_highlight = drag_highlight
 
         self.setup_drop(plugin_align)
 
