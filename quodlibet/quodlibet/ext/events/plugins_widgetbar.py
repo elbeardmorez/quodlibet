@@ -9,11 +9,14 @@ import os
 import cairo
 from collections import OrderedDict
 from inspect import isclass, getargspec
+from senf import uri2fsn
 from gi.repository import Gtk, Gdk
 
 import quodlibet
 from quodlibet import app
-from quodlibet.qltk import get_top_parent, gtk_version
+from quodlibet.qltk import get_top_parent, gtk_version, selection_get_filenames
+from quodlibet.formats import MusicFile
+
 from quodlibet.util import print_d
 from quodlibet import _
 from quodlibet.plugins import PluginConfig, BoolConfProp, ConfProp
@@ -27,11 +30,11 @@ from quodlibet.qltk.x import Align
 from quodlibet.qltk.widgetbar import WidgetBar
 from quodlibet.plugins.actions import PluginActionSelector
 from quodlibet.qltk.ccb import ConfigCheckButton
-
+from quodlibet.compat import listfilter
 
 plugin_id = "pluginswidgetbar"
 
-DND_QL_PLUGIN = 1
+DND_QL_PLUGIN, DND_QL_SONGS, DND_URI_LIST = range(3)
 
 CLICK_ACTION_SET = \
     os.path.join(quodlibet.get_user_dir(),
@@ -74,6 +77,9 @@ class PluginsWidgetBarPluginDnDMixin(object):
         targets = [
             ("text/x-quodlibet-plugin",
                  Gtk.TargetFlags.SAME_APP, DND_QL_PLUGIN),
+            ("text/x-quodlibet-songs",
+                 Gtk.TargetFlags.SAME_APP, DND_QL_SONGS),
+            ("text/uri-list", 0, DND_URI_LIST)
         ]
         targets = [Gtk.TargetEntry.new(*t) for t in targets]
         widget.drag_source_set(
@@ -87,6 +93,9 @@ class PluginsWidgetBarPluginDnDMixin(object):
         targets = [
             ("text/x-quodlibet-plugin",
                  Gtk.TargetFlags.SAME_APP, DND_QL_PLUGIN),
+            ("text/x-quodlibet-songs",
+                 Gtk.TargetFlags.SAME_APP, DND_QL_SONGS),
+            ("text/uri-list", 0, DND_URI_LIST)
         ]
         targets = [Gtk.TargetEntry.new(*t) for t in targets]
         widget.drag_source_set(
@@ -218,6 +227,38 @@ class PluginsWidgetBarPluginDnDMixin(object):
             CONFIG.sort_order = ",".join(sort_order)
             self._update()
 
+        else:
+            pathfiles = []
+            if info == DND_QL_SONGS:
+                pathfiles = selection_get_filenames(data)
+            elif info == DND_URI_LIST:
+                def to_filename(s):
+                    try:
+                        return uri2fsn(s)
+                    except ValueError:
+                        return None
+                pathfiles = \
+                    listfilter(None, map(to_filename, data.get_uris()))
+            else:
+                # TODO
+                # do something useful here ..add to library?!
+                Gtk.drag_finish(ctx, False, False, etime)
+                return
+
+            # set local 'songs'
+            songs = []
+            for pathfile in pathfiles:
+                try:
+                    song = MusicFile(pathfile)
+                    songs.append(song)
+                except:
+                    print_d("couldn't get song from file: %r" % pathfile)
+            if songs:
+                self._songs_selected = songs
+                if hasattr(widget.drag_widget, 'dragdrop_cb'):
+                    widget.drag_widget.dragdrop_cb(
+                        widget.drag_widget.dragdrop_cb_data)
+
         Gtk.drag_finish(ctx, True, False, etime)
         return
 
@@ -316,6 +357,24 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         if event.button != 1:
             return
 
+        click_cb = ""
+        if plugin.id in self.__callbacks_click:
+            click_cb = \
+                "|".join(self.__callbacks_click[plugin.id].split('|')[1:])
+
+        self.__plugin_action(plugin, click_cb, "click")
+
+    def __plugin_action_dragdrop(self, plugin):
+
+        dragdrop_cb = ""
+        if plugin.id in self.__callbacks_dragdrop:
+            dragdrop_cb = \
+                "|".join(self.__callbacks_dragdrop[plugin.id].split('|')[1:])
+
+        self.__plugin_action(plugin, dragdrop_cb, "dragdrop")
+
+    def __plugin_action(self, plugin, cbdesc, type_):
+
         # non-string arg lookup. add aliases here too
         args_set = {}
         args_set["library"] = args_set["librarian"] = app.library
@@ -324,38 +383,34 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                                     else [self._song_playing]
         args = []
 
-        click_cb = ""
-        if plugin.id in self.__callbacks_click:
-            click_cb = \
-                "|".join(self.__callbacks_click[plugin.id].split('|')[1:])
-        click_target = []
-        click_args = []
-        click_target = \
+        cbdesc_target = []
+        cbdesc_args = []
+        cbdesc_target = \
             list(reversed(map(lambda s: s.strip('<> '),
-                [s for ss in click_cb.split('|')
-                                 [0:max(len(click_cb.split("|")) - 1, 2)]
+                [s for ss in cbdesc.split('|')
+                                 [0:max(len(cbdesc.split("|")) - 1, 2)]
                    for s in ss.split('.')])))
-        if len(click_cb.split('|')) > 2:
-            click_args = \
+        if len(cbdesc.split('|')) > 2:
+            cbdesc_args = \
                list(reversed(map(lambda s: s.strip('<> '),
-                          click_cb.split('|')[-1].split('.'))))
-            if click_args:
-                args = click_args
+                          cbdesc.split('|')[-1].split('.'))))
+            if cbdesc_args:
+                args = cbdesc_args
 
-        if len(click_target) < 2:
+        if len(cbdesc_target) < 2:
             self.__plugin_actions_preferences(plugin)
             return
 
-        if click_target[-1] == "pluginswidgetbar" and \
-             click_target[-2] == "plugin default action":
+        if cbdesc_target[-1] == "pluginswidgetbar" and \
+             cbdesc_target[-2] == "plugin default action":
             callback = self.__plugin_actions_preferences
             args = [plugin]
-        elif click_target[-1] == "pluginswidgetbar" and \
-             click_target[-2] == "plugin toggle":
+        elif cbdesc_target[-1] == "pluginswidgetbar" and \
+             cbdesc_target[-2] == "plugin toggle":
             callback = self.__plugin_actions_toggle
             args = [plugin]
-        elif click_target[-1] == "pluginswidgetbar" and \
-             click_target[-2] == "plugin preferences":
+        elif cbdesc_target[-1] == "pluginswidgetbar" and \
+             cbdesc_target[-2] == "plugin preferences":
             callback = self.__plugin_actions_preferences
             args = [plugin]
         else:
@@ -365,19 +420,19 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                 pm = PluginManager.instance
                 target = \
                     next((p for p in pm.plugins
-                              if p.id == click_target[-1]), None)
+                              if p.id == cbdesc_target[-1]), None)
                 if target:
                     # look in plugin
                     target_set.append(target)
-                    click_target.pop()
+                    cbdesc_target.pop()
                     target = plugin.cls
                     target_set.append(target)
                 else:
                     modules = {m.name: m for m in pm.modules}
-                    if click_target[-1] in modules:
-                        target = modules[click_target[-1]]
+                    if cbdesc_target[-1] in modules:
+                        target = modules[cbdesc_target[-1]]
                         target_set.append(target)
-                        click_target.pop()
+                        cbdesc_target.pop()
                         elements = []
                         if target.name in self.__target_elements:
                             elements = \
@@ -387,10 +442,10 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                             self.__target_elements[target.name] = \
                                 (target, elements)
 
-                        if click_target[-1] in elements:
-                            target = elements[click_target[-1]]
+                        if cbdesc_target[-1] in elements:
+                            target = elements[cbdesc_target[-1]]
                             target_set.append(target)
-                            click_target.pop()
+                            cbdesc_target.pop()
                     else:
                         raise Exception()
 
@@ -405,17 +460,17 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                         target = target(args_sub)
                     target_set.append(target)
 
-                if click_target:
-                    if hasattr(target, click_target[-1]):
-                        target = getattr(target, click_target[-1])
+                if cbdesc_target:
+                    if hasattr(target, cbdesc_target[-1]):
+                        target = getattr(target, cbdesc_target[-1])
                         target_set.append(target)
-                        click_target.pop()
+                        cbdesc_target.pop()
 
                 callback = target
 
             except Exception, e:
-                print_d("error importing selected click target %r "
-                        "for plugin %r:\n%s" % (click_cb, plugin.id, e))
+                print_d("error importing selected %s target %r "
+                        "for plugin %r:\n%s" % (type_, cbdesc, plugin.id, e))
                 return
 
         # should hopefully just be calling a method on the target now
@@ -426,8 +481,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
             else:
                 callback(args_sub)
         except Exception, e:
-            print_d("error calling selected click target %r "
-                    "for plugin %r:\n%s" % (click_cb, plugin.id, e))
+            print_d("error calling selected %s target %r "
+                    "for plugin %r:\n%s" % (type_, cbdesc, plugin.id, e))
             return
 
     def __target_args(self, target, args, args_set):
@@ -492,16 +547,6 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
 
         classes = {obj.__name__: obj for obj in objs if isclass(obj)}
         return classes
-
-    def __plugin_action_dragdrop(self, widget, event, plugin):
-        if plugin.id in self.__callbacks_dragdrop:
-            # TODO
-            dragdrop_cb = self.__callbacks_dragdrop[plugin.id]
-            try:
-                dragdrop_cb()
-            except:
-                print_d("error calling selected dragdrop callback %r "
-                        "for plugin %r" % (dragdrop_cb, plugin.id))
 
     def __plugin_actions_preferences(self, plugin):
         self.__preferences(plugin)
@@ -696,8 +741,11 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
             plugin_box_outer.pack_start(
                 plugin_separator_box_align, False, False, 4)
 
+        # drag 'n' drop action
         plugin_align.drag_widget = plugin_box_window
         plugin_align.drag_widget.id = id
+        plugin_align.drag_widget.dragdrop_cb = dragdrop_cb
+        plugin_align.drag_widget.dragdrop_cb_data = dragdrop_cb_data
 
         def drag_highlight(enable, side=None):
             lsc = highlight_left.get_style_context()
