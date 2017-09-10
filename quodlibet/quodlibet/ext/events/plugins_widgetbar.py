@@ -88,6 +88,8 @@ class PluginsWidgetBarPluginDnDMixin(object):
         widget.drag_dest_set(
             Gtk.DestDefaults.MOTION | Gtk.DestDefaults.DROP, targets,
             Gdk.DragAction.COPY | Gdk.DragAction.MOVE)
+        self.__drag_target = None
+        self.__drag_side = None
 
     def disable_drop(self, widget):
         targets = [
@@ -154,6 +156,20 @@ class PluginsWidgetBarPluginDnDMixin(object):
 
     def __drag_end(self, widget, ctx, time):
         self.widgetbar.drag_scroll_disable()
+        if self.__drag_target:
+            self.__drag_target.drag_highlight(False)
+
+    def highlight_interest(self, widget):
+        last = self._plugin_sorted_last
+        interested = False
+        # slow, but only as long as the sort list, which should be short!
+        for w in self.widgetbar.box.get_children():
+            if w is widget:
+                interested = True
+                break
+            if w is last:
+                break
+        return interested
 
     def __drag_motion(self, widget, ctx, x, y, time):
 
@@ -162,15 +178,31 @@ class PluginsWidgetBarPluginDnDMixin(object):
         self.widgetbar.drag_scroll(mouse_pos)
 
         if hasattr(Gtk.drag_get_source_widget(ctx), 'drag_widget'):
-            self.__drag_side = round(float(x) / widget.get_allocation().width)
-            widget.drag_highlight(True, self.__drag_side)
+            drag_side = round(float(x) / widget.get_allocation().width)
+            interested = self.highlight_interest(widget)
+            if interested:
+                # update drop info
+                if self.__drag_target:
+                    self.__drag_target.drag_highlight(False)
+                self.__drag_target = widget
+                self.__drag_side = drag_side
+            else:
+                # ensure drag target is highlighted
+                if not self.__drag_target:
+                    self.__drag_target = self._plugin_sorted_last
+                    self.__drag_side = 1
+                self.__drag_target.drag_highlight(True, self.__drag_side, True)
+            widget.drag_highlight(True, drag_side, interested)
 
         Gdk.drag_status(ctx, Gdk.DragAction.COPY, time)
 
         return True
 
     def __drag_leave(self, widget, ctx, time):
-        widget.drag_highlight(False)
+        if not (widget is self._plugin_sorted_last and
+                widget is self.__drag_target and
+                self.__drag_side == 1):
+            widget.drag_highlight(False)
 
     def __drag_data_get(self, widget, ctx, data, tid, etime):
 
@@ -321,6 +353,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
 
         add_global_css("""
             .highlightbox {background-color: #558fcb;
+                           border-radius: 2px;}
+            .lowlightbox {background-color: #000000;
                            border-radius: 2px;}
             """, True)
 
@@ -658,6 +692,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                                          highlight_enabled=highlight_enabled,
                                          highlight_below=highlight_below)
             self.__content.pack_start(plugin_box, False, False, 0)
+            if p.id in plugins_map_first:
+                self._plugin_sorted_last = plugin_box
 
         self.__content.show_all()
 
@@ -747,19 +783,29 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         plugin_align.drag_widget.dragdrop_cb = dragdrop_cb
         plugin_align.drag_widget.dragdrop_cb_data = dragdrop_cb_data
 
-        def drag_highlight(enable, side=None):
+        def drag_highlight(enable, side=None, interested=False):
             lsc = highlight_left.get_style_context()
             rsc = highlight_right.get_style_context()
             if enable:
                 if side == 0:
                     rsc.remove_class('highlightbox')
-                    lsc.add_class('highlightbox')
+                    rsc.remove_class('lowlightbox')
+                    if interested:
+                        lsc.add_class('highlightbox')
+                    else:
+                        lsc.add_class('lowlightbox')
                 else:
                     lsc.remove_class('highlightbox')
-                    rsc.add_class('highlightbox')
+                    lsc.remove_class('lowlightbox')
+                    if interested:
+                        rsc.add_class('highlightbox')
+                    else:
+                        rsc.add_class('lowlightbox')
             else:
                 lsc.remove_class('highlightbox')
+                lsc.remove_class('lowlightbox')
                 rsc.remove_class('highlightbox')
+                rsc.remove_class('lowlightbox')
 
         plugin_align.drag_highlight = drag_highlight
 
