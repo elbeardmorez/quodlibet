@@ -49,6 +49,7 @@ class Config(object):
     name_in_label = BoolConfProp(_config, "name_in_label", True)
     size_in_label = BoolConfProp(_config, "size_in_label", False)
     size_in_tooltip = BoolConfProp(_config, "size_in_tooltip", True)
+    uri_in_tooltip = BoolConfProp(_config, "uri_in_tooltip", True)
     songs_history = []
 
 
@@ -121,6 +122,9 @@ class CoversBox(Gtk.HBox):
             name = os.path.splitext(os.path.basename(image.name))[0] \
                        .split('_')[-1]
             size = "x".join([str(image.width), str(image.height)])
+            uri = GLib.markup_escape_text(("external: " + image.name)
+                                          if image.external
+                                          else ("internal: " + name))
 
             coverimage = CoverImage(
                 size_mode=Gtk.SizeRequestMode.WIDTH_FOR_HEIGHT)
@@ -133,13 +137,19 @@ class CoversBox(Gtk.HBox):
             coverimage_box = Gtk.VBox()
             coverimage_box.image = coverimage
             coverimage_box.image_title = title
-            coverimage_box.image_size = size
             coverimage_box.image_name = name
+            coverimage_box.image_size = size
+            coverimage_box.image_uri = uri
 
             coverimage_box.pack_start(coverimage, True, True, 0)
 
+            tooltip = []
             if CONFIG.size_in_tooltip:
-                coverimage.set_tooltip_markup(size)
+                tooltip.append(size)
+            if CONFIG.uri_in_tooltip:
+                tooltip.append(uri)
+            if tooltip:
+                coverimage.set_tooltip_markup('\n'.join(tooltip))
 
             desc = str.format("%s%s%s") % (
                 title,
@@ -315,10 +325,14 @@ class CoversBox(Gtk.HBox):
 
     def update_tooltips(self):
         for box in self.get_children():
+            box.image.set_tooltip_markup(None)
+            tooltip = []
             if CONFIG.size_in_tooltip:
-                box.image.set_tooltip_markup(box.image_size)
-            else:
-                box.image.set_tooltip_markup(None)
+                tooltip.append(box.image_size)
+            if CONFIG.uri_in_tooltip:
+                tooltip.append(box.image_uri)
+            if tooltip:
+                box.image.set_tooltip_markup('\n'.join(tooltip))
 
 
 class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
@@ -438,6 +452,8 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             (plugin_id + '_size_in_label', _("Show image size in label"),
              None, False, lambda *x: self.__coversbox.update_labels()),
             (plugin_id + '_size_in_tooltip', _("Show image size in tooltip"),
+             None, True, lambda *x: self.__coversbox.update_tooltips()),
+            (plugin_id + '_uri_in_tooltip', _("Show image uri in tooltip"),
              None, True, lambda *x: self.__coversbox.update_tooltips()),
         ]
 
