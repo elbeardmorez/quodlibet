@@ -111,12 +111,23 @@ class CoversBox(Gtk.HBox):
         return song
 
     def generate_covers(self, imageitems, song):
-        art_last = [artitem for artset in self.__artsets_last
-                            for artitem in artset]
 
+        # ignore?
+        art_last = []
+        if self.__artsets_last:
+            sets_last = \
+                self.__artsets_last[-1 * min(CONFIG.ignore_in_last,
+                                             len(self.__artsets_last)):]
+            art_last = [artitem for artset in sets_last
+                                    for artitem in artset]
+        #print_d("considered art_last:\n%s" % '\n'.join(reversed(art_last)))
+
+        artset = []
         for image in reversed(imageitems):
-            if image.key() in art_last:
+            key = image.key()
+            if key in art_last:
                 continue
+            artset.append(key)
 
             title = "<b>" + GLib.markup_escape_text(image.album) + "</b>"
             name = os.path.splitext(os.path.basename(image.name))[0] \
@@ -172,11 +183,13 @@ class CoversBox(Gtk.HBox):
             self.covers.pop()
             self.remove(self.get_children()[-1])
 
-        if imageitems:
-            self.__artsets_last.append(map(lambda ii: ii.key(), imageitems))
-            diff = len(self.__artsets_last) - CONFIG.ignore_in_last
-            if diff > 0:
-                self.__artsets_last = self.__artsets_last[diff:]
+        # maintain a 'safe' (assumes min 1 item per set)  number of art_sets
+        diff = len(self.__artsets_last) - CONFIG.images_max
+        if diff > 0:
+            self.__artsets_last = self.__artsets_last[diff:]
+
+        if imageitems and artset:
+            self.__artsets_last.append(artset)
 
         self.show_all()
 
