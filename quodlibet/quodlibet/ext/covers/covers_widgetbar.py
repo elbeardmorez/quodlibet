@@ -397,10 +397,10 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             lambda x: x)
 
     def __songs_save_changed(self, widget, *data):
-        CONFIG.songs_save = widget.get_numeric()
+        CONFIG.songs_save = int(widget.get_value())
 
     def __ignore_in_last_changed(self, widget, *data):
-        CONFIG.ignore_in_last = widget.get_numeric()
+        CONFIG.ignore_in_last = int(widget.get_value())
 
     def __follow_front(self):
         if CONFIG.follow_front:
