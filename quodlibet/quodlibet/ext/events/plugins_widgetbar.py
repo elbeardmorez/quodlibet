@@ -270,7 +270,7 @@ class PluginsWidgetBarPluginDnDMixin(object):
                     except ValueError:
                         return None
                 pathfiles = \
-                    listfilter(None, map(to_filename, data.get_uris()))
+                    listfilter(None, list(map(to_filename, data.get_uris())))
             else:
                 # TODO
                 # do something useful here ..add to library?!
@@ -420,14 +420,14 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         cbdesc_target = []
         cbdesc_args = []
         cbdesc_target = \
-            list(reversed(map(lambda s: s.strip('<> '),
+            list(reversed(list(map(lambda s: s.strip('<> '),
                 [s for ss in cbdesc.split('|')
                                  [0:max(len(cbdesc.split("|")) - 1, 2)]
-                   for s in ss.split('.')])))
+                   for s in ss.split('.')]))))
         if len(cbdesc.split('|')) > 2:
             cbdesc_args = \
-               list(reversed(map(lambda s: s.strip('<> '),
-                          cbdesc.split('|')[-1].split('.'))))
+               list(reversed(list(map(lambda s: s.strip('<> '),
+                          cbdesc.split('|')[-1].split('.')))))
             if cbdesc_args:
                 args = cbdesc_args
 
@@ -502,7 +502,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
 
                 callback = target
 
-            except Exception, e:
+            except Exception as e:
                 print_d("error importing selected %s target %r "
                         "for plugin %r:\n%s" % (type_, cbdesc, plugin.id, e))
                 return
@@ -514,7 +514,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
                 callback(*args_sub)
             else:
                 callback(args_sub)
-        except Exception, e:
+        except Exception as e:
             print_d("error calling selected %s target %r "
                     "for plugin %r:\n%s" % (type_, cbdesc, plugin.id, e))
             return
@@ -526,7 +526,8 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         except:
             if hasattr(target, 'get_arguments'):
                 # max two args from tuple of Gtk arg infos
-                params = map(lambda o: o.__name__, target.get_arguments())
+                params = \
+                    list(map(lambda o: o.__name__, target.get_arguments()))
             else:
                 # hunt
                 paths = [['__call__']] # add more paths to try
