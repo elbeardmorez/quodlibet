@@ -394,20 +394,21 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     def __save(self):
         print_d("saving config data")
         image_paths = \
-            map(lambda ii: ii.path, self.__coversbox.covers)
+            list(map(lambda ii: ii.path, self.__coversbox.covers))
         image_paths_nonconcurrent_unique = \
-                 map(itemgetter(0), groupby(image_paths))[
+                 list(map(itemgetter(0), groupby(image_paths)))[
                -1 * min(len(self.__coversbox.covers), CONFIG.songs_save):]
         CONFIG.songs_history = image_paths_nonconcurrent_unique
         self.__write_songs_history()
 
     def __read_songs_history(self):
         items = WidgetBar.read_datafile(SONGS_HISTORY_SET, 1)
-        CONFIG.songs_history = map(lambda x: x[0], items)
+        CONFIG.songs_history = list(map(lambda x: x[0], items))
 
     def __write_songs_history(self):
         WidgetBar.write_datafile(
-            SONGS_HISTORY_SET, map(lambda x: [x], CONFIG.songs_history),
+            SONGS_HISTORY_SET,
+            list(map(lambda x: [x], CONFIG.songs_history)),
             lambda x: x)
 
     def __songs_save_changed(self, widget, *data):
