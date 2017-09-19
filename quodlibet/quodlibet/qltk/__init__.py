@@ -369,6 +369,23 @@ def add_css(widget, css, force=False):
         Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 
+def add_global_css(css, force=False):
+    """Add css for the current screen, overriding the theme.
+
+    Can raise GLib.GError in case the css is invalid
+    """
+
+    if not isinstance(css, bytes):
+        css = css.encode("utf-8")
+
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css)
+    Gtk.StyleContext.add_provider_for_screen(
+        Gdk.Screen.get_default(), provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_USER if force else
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+
 def remove_padding(widget):
     """Removes padding on supplied widget"""
     return add_css(widget, " * { padding: 0px; } ")
