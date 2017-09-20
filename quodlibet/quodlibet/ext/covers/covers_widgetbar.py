@@ -263,7 +263,7 @@ class CoversBox(Gtk.HBox):
 
             if os.path.exists(path_thumbs):
                 types = {}
-                path_hash = hashlib.md5(pathfile.encode("ascii")).hexdigest()
+                path_hash = hashlib.md5(pathfile.encode("utf8")).hexdigest()
                 # ignore some mime-types, links..
                 mime_ignore = ['-->']
                 for i in images:
