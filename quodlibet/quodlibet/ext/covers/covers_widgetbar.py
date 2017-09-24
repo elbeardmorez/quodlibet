@@ -275,6 +275,7 @@ class CoversBox(Gtk.HBox):
                         while itype + str(suffix) in types:
                             suffix += 1
                         itype = itype + str(suffix)
+                    types[itype] = True
                     key = path_hash + "_" + itype
                     f = os.path.join(path_thumbs, key)
 
