@@ -180,8 +180,11 @@ class EmbeddedImage(object):
 
         return self.file.tell()
 
-    def read(self):
-        """Read the raw image data
+    def read(self, no_of_bytes=None):
+        """Read the raw image data. If :param no_of_bytes: is
+        specified, return the first (:param no_of_bytes: > 0) or
+        last  (:param no_of_bytes: < 0) :param no_of_bytes: of
+        bytes (where available) only.
 
         Returns:
             bytes
@@ -189,8 +192,17 @@ class EmbeddedImage(object):
             IOError
         """
 
+        data = None
         self.file.seek(0)
-        data = self.file.read()
+        if not no_of_bytes:
+            data = self.file.read()
+        elif no_of_bytes > 0:
+            data = self.file.read(min(no_of_bytes, self.file.tell()))
+        elif no_of_bytes < 0:
+            # why twice? no idea. once doesn't work here though
+            self.file.seek(max(no_of_bytes, -1 * self.file.tell()), 2)
+            self.file.seek(max(no_of_bytes, -1 * self.file.tell()), 2)
+            data = self.file.read()
         self.file.seek(0)
         return data
 
