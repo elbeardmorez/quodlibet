@@ -175,6 +175,11 @@ class EmbeddedImage(object):
             type(self).__name__, self.mime_type, self.width, self.height,
             APICType.to_string(self.type), self.file)
 
+    def size(self):
+        """Read the underlying size of the data."""
+
+        return self.file.tell()
+
     def read(self):
         """Read the raw image data
 
