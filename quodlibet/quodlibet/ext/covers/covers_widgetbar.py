@@ -243,9 +243,19 @@ class CoversBox(Gtk.HBox):
                         itype = itype + str(suffix)
                     key = path_hash + "_" + itype
                     f = os.path.join(path_thumbs, key)
-                    if not os.path.exists(f):
-                        if not self.dump_file(i, f):
-                            continue
+
+                    dump = False
+                    if os.path.exists(f):
+                        fo = open(f, 'rb')
+                        if fo.tell() != i.size():
+                            dump = True
+                        elif not self.__file_equals_embeddedimage(fo, i):
+                            dump = True
+                    else:
+                        dump = True
+                    if dump and not self.dump_file(i, f):
+                        continue
+
                     width, height = self.get_info(f)
                     imageitems.append(ImageItem(f, pathfile, artist, album,
                                                 width, height, False))
@@ -273,6 +283,17 @@ class CoversBox(Gtk.HBox):
             success = False
 
         return success
+
+    def __file_equals_embeddedimage(self, fo, i, bytes_to_compare=512):
+
+        # why twice? no idea. once doesn't work here though
+        fo.seek(-min(bytes_to_compare, fo.tell()), 2)
+        fo.seek(-min(bytes_to_compare, fo.tell()), 2)
+        fbytes = fo.read()
+        ibytes = i.read(-bytes_to_compare)
+
+        return fbytes == ibytes
+
 
 class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
