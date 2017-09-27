@@ -14,7 +14,7 @@ from quodlibet.plugins import PluginConfig, BoolConfProp
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.plugins.gui import UserInterfacePlugin
 from quodlibet.formats import EmbeddedImage
-from quodlibet.qltk import Icons
+from quodlibet.qltk import Icons, add_global_css
 from quodlibet.qltk.widgetbar import WidgetBar
 from quodlibet.qltk.x import Align
 from quodlibet.util import print_d
@@ -104,6 +104,29 @@ class EmbeddedArtBox(Gtk.HBox):
 
             coverimage_box.pack_start(coverimage, True, True, 2)
 
+            coverimage_box_hborder = Gtk.HBox()
+            coverimage_box_hborder.pack_start(
+                coverimage_box, True, True, 3)
+            coverimage_box_vborder = Gtk.VBox()
+            coverimage_box_vborder.pack_start(
+                coverimage_box_hborder, True, True, 3)
+
+            coverimage_box_outer = Gtk.EventBox()
+            coverimage_box_outer.add(coverimage_box_vborder)
+
+            def highlight_toggle(widget, event, *data):
+                scv = coverimage_box_vborder.get_style_context()
+                sch = coverimage_box_hborder.get_style_context()
+                if scv.has_class('highlightbox'):
+                    scv.remove_class('highlightbox')
+                    sch.remove_class('highlightbox')
+                else:
+                    scv.add_class('highlightbox')
+                    sch.add_class('highlightbox')
+
+            coverimage_box_outer.connect(
+                "button-press-event", highlight_toggle)
+
             tooltip = []
             tooltip.append(size)
             coverimage.set_tooltip_markup('\n'.join(tooltip))
@@ -113,12 +136,12 @@ class EmbeddedArtBox(Gtk.HBox):
             label_desc.set_line_wrap(True)
             label_desc.set_use_markup(True)
             label_desc.set_tooltip_markup(image.path)
-            align_label_desc = Align(bottom=15)
-            align_label_desc.add(label_desc)
             coverimage_box.label = label_desc
-            coverimage_box.pack_start(align_label_desc, False, True, 4)
+            coverimage_box.pack_start(label_desc, False, True, 4)
 
-            self.pack_start(coverimage_box, True, False, 5)
+            coverimage_box_outer_align = Align(bottom=15)
+            coverimage_box_outer_align.add(coverimage_box_outer)
+            self.pack_start(coverimage_box_outer_align, True, False, 5)
 
             self.covers.append(image)
 
@@ -235,6 +258,13 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     def __init__(self):
         super(EmbeddedArtWidgetBarPlugin, self).__init__()
         self.live = False
+
+        add_global_css("""
+            .highlightbox {
+                border-color: #558fcb;
+                border-radius: 2px;
+            }
+        """)
 
     def enabled(self):
         pass
