@@ -20,6 +20,7 @@ from quodlibet.qltk.x import Align
 from quodlibet.util import print_d
 from quodlibet.qltk.cover import CoverImage
 from quodlibet.util.thumbnails import get_thumbnail_folder
+from quodlibet.qltk.ccb import ConfigCheckButton
 
 
 plugin_id = "embeddedartwidgetbar"
@@ -29,6 +30,9 @@ class Config(object):
     _config = PluginConfig(plugin_id)
 
     expanded = BoolConfProp(_config, "expanded", True)
+    name_in_label = BoolConfProp(_config, "name_in_label", True)
+    size_in_label = BoolConfProp(_config, "size_in_label", False)
+    size_in_tooltip = BoolConfProp(_config, "size_in_tooltip", True)
 
 
 CONFIG = Config()
@@ -128,10 +132,15 @@ class EmbeddedArtBox(Gtk.HBox):
                 "button-press-event", highlight_toggle)
 
             tooltip = []
-            tooltip.append(size)
-            coverimage.set_tooltip_markup('\n'.join(tooltip))
+            if CONFIG.size_in_tooltip:
+                tooltip.append(size)
+            if tooltip:
+                coverimage.set_tooltip_markup('\n'.join(tooltip))
 
-            desc = title + " [" + name + "] [" + size + "]"
+            desc = str.format("%s%s%s") % (
+                title,
+                " [" + name + "]" if CONFIG.name_in_label else "",
+                " [" + size + "]" if CONFIG.size_in_label else "")
             label_desc = Gtk.Label(desc)
             label_desc.set_line_wrap(True)
             label_desc.set_use_markup(True)
@@ -141,6 +150,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
             coverimage_box_outer_align = Align(bottom=15)
             coverimage_box_outer_align.add(coverimage_box_outer)
+            coverimage_box_outer_align.coverimage_box = coverimage_box
             self.pack_start(coverimage_box_outer_align, True, False, 5)
 
             self.covers.append(image)
@@ -245,6 +255,27 @@ class EmbeddedArtBox(Gtk.HBox):
 
         return fbytes == ibytes
 
+    def update_labels(self):
+        for widget in self.get_children():
+            box = widget.coverimage_box
+            box.label.set_text("%s%s%s" % (
+                box.image_title,
+                " [" + box.image_name + "]"
+                if CONFIG.name_in_label else "",
+                " [" + box.image_size + "]"
+                if CONFIG.size_in_label else ""))
+            box.label.set_use_markup(True)
+
+    def update_tooltips(self):
+        for widget in self.get_children():
+            box = widget.coverimage_box
+            box.image.set_tooltip_markup(None)
+            tooltip = []
+            if CONFIG.size_in_tooltip:
+                tooltip.append(box.image_size)
+            if tooltip:
+                box.image.set_tooltip_markup('\n'.join(tooltip))
+
 
 class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -295,3 +326,28 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
     def __save(self):
         print_d("saving config data")
+
+    def PluginPreferences(self, window):
+
+        box = Gtk.VBox(spacing=4)
+
+        # toggles
+        toggles = [
+            (plugin_id + '_name_in_label', _("Show image name in label"),
+             None, False, lambda *x: self.__embeddedart_box.update_labels()),
+            (plugin_id + '_size_in_label', _("Show image size in label"),
+             None, False, lambda *x: self.__embeddedart_box.update_labels()),
+            (plugin_id + '_size_in_tooltip', _("Show image size in tooltip"),
+             None, True, lambda *x: self.__embeddedart_box.update_tooltips()),
+        ]
+
+        for key, label, tooltip, default, changed_cb in toggles:
+            ccb = ConfigCheckButton(label, 'plugins', key,
+                                    populate=True)
+            ccb.connect("toggled", changed_cb)
+            if tooltip:
+                ccb.set_tooltip_text(tooltip)
+
+            box.pack_start(ccb, True, True, 0)
+
+        return box
