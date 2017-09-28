@@ -263,7 +263,8 @@ class CoverImage(Gtk.EventBox):
 
         self.__resizeimage = ResizeImage(hcenter, vcenter, size_mode, size)
         self.add(self.__resizeimage)
-        self.connect('button-press-event', self.__show_cover)
+        self.connect('button-press-event', self.__cover_click)
+        self.__cover_click_cb = None
         self.set_song(song)
         self.get_child().show_all()
 
@@ -322,7 +323,27 @@ class CoverImage(Gtk.EventBox):
     def __nonzero__(self):
         return bool(self.__file)
 
-    def __show_cover(self, box, event):
+    @property
+    def cover_click_cb(self):
+        return self.__cover_click_cb
+
+    @cover_click_cb.setter
+    def cover_click_cb(self, value):
+        self.__cover_click_cb = value
+
+    def __cover_click(self, widget, event):
+        if self.cover_click_cb:
+            handled = self.cover_click_cb(widget, event)
+            if handled:
+                return True
+
+        if (event.button != Gdk.BUTTON_PRIMARY or
+                event.type != Gdk.EventType.BUTTON_PRESS):
+            return
+
+        self._show_cover()
+
+    def _show_cover(self):
         """Show the cover as a detached BigCenteredImage.
         If one is already showing, destroy it instead
         If there is no image, run the AlbumArt plugin
@@ -336,10 +357,6 @@ class CoverImage(Gtk.EventBox):
             config.getboolean('settings', 'multiple_big_images', False)
         current_id = "|".join([self.artist, self.album,
                                self.name, str(self.external)])
-
-        if (event.button != Gdk.BUTTON_PRIMARY or
-                event.type != Gdk.EventType.BUTTON_PRESS):
-            return
 
         if not self.__file and song.is_file:
             from quodlibet.qltk.songsmenu import SongsMenu
