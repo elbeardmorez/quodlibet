@@ -36,6 +36,7 @@ class Config(object):
 
 
 CONFIG = Config()
+DOUBLE_CLICK_TIMEOUT = 200
 
 
 class ImageItem(object):
@@ -80,6 +81,26 @@ class EmbeddedArtBox(Gtk.HBox):
         for w in self.get_children():
             self.remove(w)
 
+    def __cover_click_single(self, coverimage):
+        if self.__double_clicked:
+            return False
+        box = coverimage.get_parent()
+        box.highlight_toggle(box)
+        return False
+
+    def __cover_click_double(self, coverimage):
+        coverimage._show_cover()
+
+    def __cover_click(self, coverimage, event):
+        if event.type == Gdk.EventType.BUTTON_PRESS:
+            self.__double_clicked = False
+            GLib.timeout_add(DOUBLE_CLICK_TIMEOUT,
+                             self.__cover_click_single, coverimage)
+        elif event.type == Gdk.EventType._2BUTTON_PRESS:
+            self.__double_clicked = True
+            self.__cover_click_double(coverimage)
+        return True
+
     def __generate_covers(self, imageitems, song):
         covers = len(self.covers)
         if len(self.covers) + len(imageitems) >= self.covers_max:
@@ -95,6 +116,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
             coverimage = CoverImage(resize=True)
             coverimage.set_song(song)
+            coverimage.cover_click_cb = self.__cover_click
 
             fsn = path2fsn(image.name)
             fo = open(fsn, "rb")
@@ -118,7 +140,7 @@ class EmbeddedArtBox(Gtk.HBox):
             coverimage_box_outer = Gtk.EventBox()
             coverimage_box_outer.add(coverimage_box_vborder)
 
-            def highlight_toggle(widget, event, *data):
+            def highlight_toggle(box):
                 scv = coverimage_box_vborder.get_style_context()
                 sch = coverimage_box_hborder.get_style_context()
                 if scv.has_class('highlightbox'):
@@ -128,8 +150,7 @@ class EmbeddedArtBox(Gtk.HBox):
                     scv.add_class('highlightbox')
                     sch.add_class('highlightbox')
 
-            coverimage_box_outer.connect(
-                "button-press-event", highlight_toggle)
+            coverimage_box.highlight_toggle = highlight_toggle
 
             tooltip = []
             if CONFIG.size_in_tooltip:
@@ -150,7 +171,15 @@ class EmbeddedArtBox(Gtk.HBox):
 
             coverimage_box_outer_align = Align(bottom=15)
             coverimage_box_outer_align.add(coverimage_box_outer)
+
             coverimage_box_outer_align.coverimage_box = coverimage_box
+
+            def highlight_toggle_cb(widget, event, *data):
+                widget.coverimage_box.highlight_toggle(widget.coverimage_box)
+
+            coverimage_box_outer_align.connect(
+                "button-press-event", highlight_toggle_cb)
+
             self.pack_start(coverimage_box_outer_align, True, False, 5)
 
             self.covers.append(image)
