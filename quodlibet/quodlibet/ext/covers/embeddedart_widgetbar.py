@@ -76,7 +76,7 @@ class EmbeddedArtBox(Gtk.HBox):
         self.__covers_total_count = 0
 
         # covers stack
-        self.covers = []
+        self.image_widgets = []
         self.covers_max = 50
 
     def update(self, songs):
@@ -86,13 +86,13 @@ class EmbeddedArtBox(Gtk.HBox):
         self.__clear_covers()
         for song in songs:
             imageitems = self.__get_artwork(song)
-            if len(self.covers) == self.covers_max:
+            if len(self.image_widgets) == self.covers_max:
                 print_d("covers max hit, ignoring then rest!")
                 break
             self.__generate_covers(imageitems, song)
 
         self.select_count = 0
-        self.total_count = len(self.covers)
+        self.total_count = len(self.image_widgets)
 
     @property
     def select_count(self):
@@ -115,7 +115,7 @@ class EmbeddedArtBox(Gtk.HBox):
     def update_select_count(self):
         self.select_count = \
             sum(1 for w in self.get_children()
-                      if w.coverimage_box.is_selected)
+                      if w.image_widget.is_selected)
 
     def update_total_count(self):
         self.total_count = len(self.image_widgets)
@@ -125,7 +125,7 @@ class EmbeddedArtBox(Gtk.HBox):
         self.update_total_count()
 
     def __clear_covers(self):
-        self.covers = []
+        self.image_widgets = []
         for w in self.get_children():
             self.remove(w)
 
@@ -150,10 +150,10 @@ class EmbeddedArtBox(Gtk.HBox):
         return True
 
     def __generate_covers(self, imageitems, song):
-        covers = len(self.covers)
-        if len(self.covers) + len(imageitems) >= self.covers_max:
-            if self.covers < self.covers_max:
-                imageitems = imageitems[:self.covers_max - covers]
+        if len(self.image_widgets) + len(imageitems) >= self.covers_max:
+            if self.image_widgets < self.covers_max:
+                imageitems = imageitems[:self.covers_max -
+                                         len(self.image_widgets)]
 
         for image in imageitems:
 
@@ -170,28 +170,29 @@ class EmbeddedArtBox(Gtk.HBox):
             fo = open(fsn, "rb")
             coverimage.set_image(fo, name, image.external)
 
-            coverimage_box = Gtk.VBox()
-            coverimage_box.image = coverimage
-            coverimage_box.image_title = title
-            coverimage_box.image_name = name
-            coverimage_box.image_size = size
-            coverimage_box.is_selected = False
+            image_widget = Gtk.VBox()
+            image_widget.image = image
+            image_widget.cover = coverimage
+            image_widget.image_title = title
+            image_widget.image_name = name
+            image_widget.image_size = size
+            image_widget.is_selected = False
 
-            coverimage_box.pack_start(coverimage, True, True, 2)
+            image_widget.pack_start(coverimage, True, True, 2)
 
-            coverimage_box_hborder = Gtk.HBox()
-            coverimage_box_hborder.pack_start(
-                coverimage_box, True, True, 3)
-            coverimage_box_vborder = Gtk.VBox()
-            coverimage_box_vborder.pack_start(
-                coverimage_box_hborder, True, True, 3)
+            image_widget_hborder = Gtk.HBox()
+            image_widget_hborder.pack_start(
+                image_widget, True, True, 3)
+            image_widget_vborder = Gtk.VBox()
+            image_widget_vborder.pack_start(
+                image_widget_hborder, True, True, 3)
 
-            coverimage_box_outer = Gtk.EventBox()
-            coverimage_box_outer.add(coverimage_box_vborder)
+            image_widget_outer = Gtk.EventBox()
+            image_widget_outer.add(image_widget_vborder)
 
             def highlight_toggle(box):
-                scv = coverimage_box_vborder.get_style_context()
-                sch = coverimage_box_hborder.get_style_context()
+                scv = image_widget_vborder.get_style_context()
+                sch = image_widget_hborder.get_style_context()
                 if scv.has_class('highlightbox'):
                     scv.remove_class('highlightbox')
                     sch.remove_class('highlightbox')
@@ -202,7 +203,7 @@ class EmbeddedArtBox(Gtk.HBox):
                     box.is_selected = True
                 self.update_select_count()
 
-            coverimage_box.highlight_toggle = highlight_toggle
+            image_widget.highlight_toggle = highlight_toggle
 
             tooltip = []
             if CONFIG.size_in_tooltip:
@@ -218,23 +219,23 @@ class EmbeddedArtBox(Gtk.HBox):
             label_desc.set_line_wrap(True)
             label_desc.set_use_markup(True)
             label_desc.set_tooltip_markup(image.path)
-            coverimage_box.label = label_desc
-            coverimage_box.pack_start(label_desc, False, True, 4)
+            image_widget.label = label_desc
+            image_widget.pack_start(label_desc, False, True, 4)
 
-            coverimage_box_outer_align = Align(bottom=15)
-            coverimage_box_outer_align.add(coverimage_box_outer)
+            image_widget_outer_align = Align(bottom=15)
+            image_widget_outer_align.add(image_widget_outer)
 
-            coverimage_box_outer_align.coverimage_box = coverimage_box
+            image_widget_outer_align.image_widget = image_widget
 
             def highlight_toggle_cb(widget, event, *data):
-                widget.coverimage_box.highlight_toggle(widget.coverimage_box)
+                widget.image_widget.highlight_toggle(widget.image_widget)
 
-            coverimage_box_outer_align.connect(
+            image_widget_outer_align.connect(
                 "button-press-event", highlight_toggle_cb)
 
-            self.pack_start(coverimage_box_outer_align, True, False, 5)
+            self.pack_start(image_widget_outer_align, True, False, 5)
 
-            self.covers.append(image)
+            self.image_widgets.append(image_widget)
 
         self.show_all()
 
@@ -338,7 +339,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
     def update_labels(self):
         for widget in self.get_children():
-            box = widget.coverimage_box
+            box = widget.image_widget
             box.label.set_text("%s%s%s" % (
                 box.image_title,
                 " [" + box.image_name + "]"
@@ -349,13 +350,13 @@ class EmbeddedArtBox(Gtk.HBox):
 
     def update_tooltips(self):
         for widget in self.get_children():
-            box = widget.coverimage_box
-            box.image.set_tooltip_markup(None)
+            box = widget.image_widget
+            box.cover.set_tooltip_markup(None)
             tooltip = []
             if CONFIG.size_in_tooltip:
                 tooltip.append(box.image_size)
             if tooltip:
-                box.image.set_tooltip_markup('\n'.join(tooltip))
+                box.cover.set_tooltip_markup('\n'.join(tooltip))
 
 
 class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
