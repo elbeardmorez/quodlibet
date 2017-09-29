@@ -379,7 +379,15 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
                 border-color: #558fcb;
                 border-radius: 2px;
             }
-        """)
+            .boldandbig1 {
+                font-weight: bold;
+                font-size: 1.5em
+            }
+            .boldandbig2 {
+                font-weight: bold;
+                font-size: 1.2em
+            }
+        """, True)
 
     def enabled(self):
         pass
@@ -394,12 +402,24 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.__content = self.__widgetbar.box
         self.__widgetbar.title.set_text(self.PLUGIN_NAME)
 
-        self.label_count = Gtk.Label()
-        self.__controls.pack_start(self.label_count, False, False, 10)
-        self.__label_count_prefix = _(u"Selected")
-        self.__label_count_select = 0
-        self.__label_count_total = 0
-        self.__update_count()
+        self.label_count_box = Gtk.HBox(spacing=2)
+        self.label_count_box.set_size_request(150, -1)
+        self.__controls.pack_start(
+            self.label_count_box, False, False, 10)
+        label_count_prefix = Gtk.Label(_(u"Selected") + ": ")
+        self.label_count_box.pack_start(
+            label_count_prefix, False, False, 0)
+        self.label_count_select = Gtk.Label()
+        self.label_count_select.get_style_context().add_class("boldandbig1")
+        self.label_count_box.pack_start(
+            self.label_count_select, False, False, 0)
+        self.label_count_separator = Gtk.Label()
+        self.label_count_box.pack_start(
+            self.label_count_separator, False, False, 0)
+        self.label_count_total = Gtk.Label()
+        self.label_count_total.get_style_context().add_class("boldandbig2")
+        self.label_count_box.pack_start(
+            self.label_count_total, False, False, 0)
 
         align_covers = Gtk.Alignment(xalign=0.5, xscale=1.0)
         self.__embeddedart_box = EmbeddedArtBox()
@@ -414,23 +434,30 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             'total-count-changed',
             self.__embeddedart_on_total_count_changed)
 
+        self.__select_count = 0
+        self.__total_count = 0
+        self.__update_count()
+
         self.live = True
 
         return self.__widgetbar
 
     def __update_count(self):
-        self.label_count.set_text("%s: <b>%d</b> [/%d]" %
-            (self.__label_count_prefix,
-             self.__label_count_select,
-             self.__label_count_total))
-        self.label_count.set_use_markup(True)
+        if self.__total_count:
+            self.label_count_select.set_text(str(self.__select_count))
+            self.label_count_total.set_text(str(self.__total_count))
+            self.label_count_separator.set_text(" of ")
+        else:
+            self.label_count_select.set_text("")
+            self.label_count_total.set_text("")
+            self.label_count_separator.set_text("")
 
     def __embeddedart_on_select_count_changed(self, ojbect, count):
-        self.__label_count_select = count
+        self.__select_count = count
         self.__update_count()
 
-    def __embeddedart_on_total_count_changed(self, object, total):
-        self.__label_count_total = total
+    def __embeddedart_on_total_count_changed(self, object, count):
+        self.__total_count = count
         self.__update_count()
 
     def plugin_on_songs_selected(self, songs):
