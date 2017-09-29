@@ -17,10 +17,11 @@ from quodlibet.formats import EmbeddedImage
 from quodlibet.qltk import Icons, add_global_css
 from quodlibet.qltk.widgetbar import WidgetBar
 from quodlibet.qltk.x import Align
-from quodlibet.util import print_d
+from quodlibet.util import print_d, print_exc
 from quodlibet.qltk.cover import CoverImage
 from quodlibet.util.thumbnails import get_thumbnail_folder
 from quodlibet.qltk.ccb import ConfigCheckButton
+from quodlibet.formats import AudioFileError
 
 
 plugin_id = "embeddedartwidgetbar"
@@ -112,10 +113,15 @@ class EmbeddedArtBox(Gtk.HBox):
         self.__covers_total_count = value
         self.signalbox.emit('total-count-changed', value)
 
+    def get_selected_widgets(self):
+        return [w for w in self.get_children()
+                    if w.image_widget.is_selected]
+
+    def get_selected_image_widgets(self):
+        return [w.image_widget for w in self.get_selected_widgets()]
+
     def update_select_count(self):
-        self.select_count = \
-            sum(1 for w in self.get_children()
-                      if w.image_widget.is_selected)
+        self.select_count = sum(1 for w in self.get_selected_widgets())
 
     def update_total_count(self):
         self.total_count = len(self.image_widgets)
@@ -172,6 +178,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
             image_widget = Gtk.VBox()
             image_widget.image = image
+            image_widget.song = song
             image_widget.cover = coverimage
             image_widget.image_title = title
             image_widget.image_name = name
@@ -228,6 +235,7 @@ class EmbeddedArtBox(Gtk.HBox):
             image_widget_outer_align.add(image_widget_outer)
 
             image_widget_outer_align.image_widget = image_widget
+            image_widget.outer = image_widget_outer_align
 
             def highlight_toggle_cb(widget, event, *data):
                 widget.image_widget.highlight_toggle(widget.image_widget)
@@ -360,6 +368,26 @@ class EmbeddedArtBox(Gtk.HBox):
             if tooltip:
                 box.cover.set_tooltip_markup('\n'.join(tooltip))
 
+    def _remove_widget_by_image_widget(self, image_widget):
+        self.remove(image_widget.outer)
+        self.image_widgets.remove(image_widget)
+        self.update_select_count()
+        self.total_count = len(self.image_widgets)
+
+    def _clear_images(self):
+
+        for w in self.get_selected_image_widgets():
+            if not w.song.can_change_images:
+                ext = os.path.splitext(w.song['~filename'])[1][1:]
+                print_d("skipping unsupported song type %r [%s]"
+                        % (ext, w.song['~filename']))
+                continue
+            try:
+                w.song.clear_images()
+                self._remove_widget_by_image_widget(w)
+            except AudioFileError:
+                print_exc()
+
 
 class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -387,6 +415,10 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
                 font-weight: bold;
                 font-size: 1.2em
             }
+            .warning {
+                color: red;
+                font-weight: bold;
+            }
         """, True)
 
     def enabled(self):
@@ -402,9 +434,12 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.__content = self.__widgetbar.box
         self.__widgetbar.title.set_text(self.PLUGIN_NAME)
 
+        self.__controls_box_outer = Gtk.VBox()
+        self.__controls.pack_start(self.__controls_box_outer, False, False, 10)
+
         self.label_count_box = Gtk.HBox(spacing=2)
         self.label_count_box.set_size_request(150, -1)
-        self.__controls.pack_start(
+        self.__controls_box_outer.pack_start(
             self.label_count_box, False, False, 10)
         label_count_prefix = Gtk.Label(_(u"Selected") + ": ")
         self.label_count_box.pack_start(
@@ -434,6 +469,16 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             'total-count-changed',
             self.__embeddedart_on_total_count_changed)
 
+        self.__controls_box = Gtk.VBox()
+        self.__controls_box_outer.pack_start(
+            self.__controls_box, False, False, 0)
+
+        clear_button = Gtk.Button(_(u"Clear"))
+        clear_button.connect(
+            "button-press-event",
+            lambda *_: self.__embeddedart_box._clear_images())
+        self.__controls_box.pack_start(clear_button, False, False, 5)
+
         self.__select_count = 0
         self.__total_count = 0
         self.__update_count()
@@ -451,6 +496,11 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             self.label_count_select.set_text("")
             self.label_count_total.set_text("")
             self.label_count_separator.set_text("")
+
+        map(lambda w, s=False if self.__select_count == 0
+                              else True:
+                w.set_sensitive(s),
+            self.__controls_box.get_children())
 
     def __embeddedart_on_select_count_changed(self, ojbect, count):
         self.__select_count = count
