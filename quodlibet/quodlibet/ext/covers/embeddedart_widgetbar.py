@@ -7,7 +7,7 @@
 import os
 import hashlib
 from senf import path2fsn
-from gi.repository import Gtk, Gdk, GLib
+from gi.repository import Gtk, Gdk, GLib, GObject
 
 from quodlibet import _
 from quodlibet.plugins import PluginConfig, BoolConfProp
@@ -39,6 +39,16 @@ CONFIG = Config()
 DOUBLE_CLICK_TIMEOUT = 200
 
 
+class SignalBox(GObject.GObject):
+
+    __gsignals__ = {
+        "select-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int]),
+        "total-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int])
+    }
+
+
 class ImageItem(object):
     def __init__(self, name, path, artist, album, width, height, external):
         self.name = name
@@ -60,6 +70,11 @@ class EmbeddedArtBox(Gtk.HBox):
 
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
 
+        self.signalbox = SignalBox()
+
+        self.__covers_select_count = 0
+        self.__covers_total_count = 0
+
         # covers stack
         self.covers = []
         self.covers_max = 50
@@ -75,6 +90,39 @@ class EmbeddedArtBox(Gtk.HBox):
                 print_d("covers max hit, ignoring then rest!")
                 break
             self.__generate_covers(imageitems, song)
+
+        self.select_count = 0
+        self.total_count = len(self.covers)
+
+    @property
+    def select_count(self):
+        return self.__covers_select_count
+
+    @select_count.setter
+    def select_count(self, value):
+        self.__covers_select_count = value
+        self.signalbox.emit('select-count-changed', value)
+
+    @property
+    def total_count(self):
+        return self.__covers_total_count
+
+    @total_count.setter
+    def total_count(self, value):
+        self.__covers_total_count = value
+        self.signalbox.emit('total-count-changed', value)
+
+    def update_select_count(self):
+        self.select_count = \
+            sum(1 for w in self.get_children()
+                      if w.coverimage_box.is_selected)
+
+    def update_total_count(self):
+        self.total_count = len(self.image_widgets)
+
+    def update_counts(self):
+        self.update_select_count()
+        self.update_total_count()
 
     def __clear_covers(self):
         self.covers = []
@@ -127,6 +175,7 @@ class EmbeddedArtBox(Gtk.HBox):
             coverimage_box.image_title = title
             coverimage_box.image_name = name
             coverimage_box.image_size = size
+            coverimage_box.is_selected = False
 
             coverimage_box.pack_start(coverimage, True, True, 2)
 
@@ -146,9 +195,12 @@ class EmbeddedArtBox(Gtk.HBox):
                 if scv.has_class('highlightbox'):
                     scv.remove_class('highlightbox')
                     sch.remove_class('highlightbox')
+                    box.is_selected = False
                 else:
                     scv.add_class('highlightbox')
                     sch.add_class('highlightbox')
+                    box.is_selected = True
+                self.update_select_count()
 
             coverimage_box.highlight_toggle = highlight_toggle
 
@@ -335,8 +387,16 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
     def create_widgetbar(self):
         self.__widgetbar = WidgetBar(plugin_id)
+        self.__controls = self.__widgetbar.box_left
         self.__content = self.__widgetbar.box
         self.__widgetbar.title.set_text(self.PLUGIN_NAME)
+
+        self.label_count = Gtk.Label()
+        self.__controls.pack_start(self.label_count, False, False, 10)
+        self.__label_count_prefix = _(u"Selected")
+        self.__label_count_select = 0
+        self.__label_count_total = 0
+        self.__update_count()
 
         align_covers = Gtk.Alignment(xalign=0.5, xscale=1.0)
         self.__embeddedart_box = EmbeddedArtBox()
@@ -344,9 +404,31 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.__content.pack_start(align_covers, True, True, 0)
         self.__content.show_all()
 
+        self.__embeddedart_box.signalbox.connect(
+            'select-count-changed',
+            self.__embeddedart_on_select_count_changed)
+        self.__embeddedart_box.signalbox.connect(
+            'total-count-changed',
+            self.__embeddedart_on_total_count_changed)
+
         self.live = True
 
         return self.__widgetbar
+
+    def __update_count(self):
+        self.label_count.set_text("%s: <b>%d</b> [/%d]" %
+            (self.__label_count_prefix,
+             self.__label_count_select,
+             self.__label_count_total))
+        self.label_count.set_use_markup(True)
+
+    def __embeddedart_on_select_count_changed(self, ojbect, count):
+        self.__label_count_select = count
+        self.__update_count()
+
+    def __embeddedart_on_total_count_changed(self, object, total):
+        self.__label_count_total = total
+        self.__update_count()
 
     def plugin_on_songs_selected(self, songs):
         if not self.live:
