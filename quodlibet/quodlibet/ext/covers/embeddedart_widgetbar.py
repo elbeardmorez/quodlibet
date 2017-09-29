@@ -191,8 +191,8 @@ class EmbeddedArtBox(Gtk.HBox):
             image_widget_outer.add(image_widget_vborder)
 
             def highlight_toggle(box):
-                scv = image_widget_vborder.get_style_context()
-                sch = image_widget_hborder.get_style_context()
+                scv = box.vborder.get_style_context()
+                sch = box.hborder.get_style_context()
                 if scv.has_class('highlightbox'):
                     scv.remove_class('highlightbox')
                     sch.remove_class('highlightbox')
@@ -203,6 +203,8 @@ class EmbeddedArtBox(Gtk.HBox):
                     box.is_selected = True
                 self.update_select_count()
 
+            image_widget.vborder = image_widget_vborder
+            image_widget.hborder = image_widget_hborder
             image_widget.highlight_toggle = highlight_toggle
 
             tooltip = []
