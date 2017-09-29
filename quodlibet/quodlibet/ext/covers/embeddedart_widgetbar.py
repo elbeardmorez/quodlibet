@@ -10,6 +10,7 @@ from senf import path2fsn
 from gi.repository import Gtk, Gdk, GLib, GObject
 
 from quodlibet import _
+from quodlibet import app
 from quodlibet.plugins import PluginConfig, BoolConfProp
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.plugins.gui import UserInterfacePlugin
@@ -388,6 +389,30 @@ class EmbeddedArtBox(Gtk.HBox):
             except AudioFileError:
                 print_exc()
 
+    def _set_image(self):
+
+        for w in self.get_selected_image_widgets():
+            if not w.song.can_change_images:
+                ext = os.path.splitext(w.song['~filename'])[1][1:]
+                print_d("skipping unsupported song type %r [%s]"
+                        % (ext, w.song['~filename']))
+                continue
+            fh = app.cover_manager.get_cover(w.song)
+            if not fh:
+                print_d("no cover image available for song %r"
+                        % (w.song['~filename']))
+                continue
+            pathfile = fh.name
+            image = EmbeddedImage.from_path(pathfile)
+            if not image:
+                print_d("error creating embedded image %r for song %r"
+                        % (pathfile, w.song['~filename']))
+                continue
+            try:
+                w.song.set_image(image)
+            except AudioFileError:
+                print_exc()
+
 
 class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -472,6 +497,19 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.__controls_box = Gtk.VBox()
         self.__controls_box_outer.pack_start(
             self.__controls_box, False, False, 0)
+
+        single_box = Gtk.VBox(spacing=2)
+        self.__controls_box.pack_start(single_box, False, False, 5)
+        label_single_warning = Gtk.Label(_(u"WARNING!"))
+        label_single_warning.get_style_context().add_class("warning")
+        label_single_warning.set_tooltip_text(
+            _(u"WARNING: this will delete all existing embedded images"))
+        single_box.pack_start(label_single_warning, False, False, 0)
+        single_button = Gtk.Button(_(u"Single"))
+        single_button.connect(
+            "button-press-event",
+            lambda *_: self.__embeddedart_box._set_image())
+        single_box.pack_start(single_button, False, False, 0)
 
         clear_button = Gtk.Button(_(u"Clear"))
         clear_button.connect(
