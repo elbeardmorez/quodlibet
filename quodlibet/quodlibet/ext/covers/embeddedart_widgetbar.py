@@ -23,6 +23,7 @@ from quodlibet.qltk.cover import CoverImage
 from quodlibet.util.thumbnails import get_thumbnail_folder
 from quodlibet.qltk.ccb import ConfigCheckButton
 from quodlibet.formats import AudioFileError
+from quodlibet.qltk.chooser import choose_files, create_chooser_filter
 
 
 plugin_id = "embeddedartwidgetbar"
@@ -443,6 +444,38 @@ class EmbeddedArtBox(Gtk.HBox):
             except AudioFileError:
                 print_exc()
 
+    def _add_image(self):
+
+        pathfiles = self._choose_art_files()
+
+        images = []
+        for pathfile in pathfiles:
+            image = EmbeddedImage.from_path(pathfile)
+            if not image:
+                print_d("error creating embedded image %r" % pathfile)
+                continue
+            images.append(image)
+
+        for w in self.get_selected_image_widgets():
+            if not w.song.can_change_images:
+                ext = os.path.splitext(w.song['~filename'])[1][1:]
+                print_d("skipping unsupported song type %r [%s]"
+                        % (ext, w.song['~filename']))
+                continue
+
+            for image in images:
+                try:
+                    w.song.add_image(image)
+                except AudioFileError:
+                    print_exc()
+
+    def _choose_art_files(self):
+        image_types = ['jpg', 'png']
+        patterns = ["*" + type_ for type_ in image_types]
+        choose_filter = create_chooser_filter(_("Art Files"), patterns)
+        return choose_files(self, _("Add Embedded Art"),
+                            _("_Add File"), choose_filter)
+
 
 class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     """The plugin class."""
@@ -552,6 +585,12 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             "button-press-event",
             lambda *_: self.__embeddedart_box._remove_image())
         self.__controls_box.pack_start(remove_button, False, False, 5)
+
+        add_button = Gtk.Button(_(u"Add"))
+        add_button.connect(
+            "button-press-event",
+            lambda *_: self.__embeddedart_box._add_image())
+        self.__controls_box.pack_start(add_button, False, False, 5)
 
         self.__select_count = 0
         self.__total_count = 0
