@@ -538,6 +538,21 @@ class ID3File(AudioFile):
         if audio.tags is None:
             audio.add_tags()
 
+        frame = self.add_image(image, type_=APICType.COVER_FRONT)
+
+        audio.tags.setall('APIC', [frame])
+        with translate_errors():
+            audio.save()
+
+    def add_image(self, image, type_=APICType.OTHER):
+        """Embedded passed image."""
+
+        with translate_errors():
+            audio = self.Kind(self["~filename"])
+
+        if audio.tags is None:
+            audio.add_tags()
+
         tag = audio.tags
 
         try:
@@ -545,9 +560,8 @@ class ID3File(AudioFile):
         except EnvironmentError as e:
             raise AudioFileError(e)
 
-        tag.delall("APIC")
         frame = mutagen.id3.APIC(
-            encoding=3, mime=image.mime_type, type=APICType.COVER_FRONT,
+            encoding=3, mime=image.mime_type, type=type_,
             desc=u"", data=data)
         tag.add(frame)
 
@@ -555,3 +569,4 @@ class ID3File(AudioFile):
             audio.save()
 
         self.has_images = True
+        return frame

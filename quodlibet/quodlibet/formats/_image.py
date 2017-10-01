@@ -84,6 +84,18 @@ class ImageContainer(object):
 
         raise AudioFileError("Not supported for this format")
 
+    def add_image(self, image, type_=None):
+        """Embedded passed image.
+
+        The image type recorded in the file will be APICType.OTHER,
+        unless otherwise specified by the :param type_: parameter.
+
+        Raises:
+            AudioFileError
+        """
+
+        raise AudioFileError("Not supported for this format")
+
 
 class APICType(object):
     """Enumeration of image types defined by the ID3 standard but also reused
