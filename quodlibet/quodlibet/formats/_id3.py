@@ -451,6 +451,37 @@ class ID3File(AudioFile):
 
         self.has_images = False
 
+    def remove_image(self, image):
+        """Remove an embedded image"""
+
+        with translate_errors():
+            audio = self.Kind(self["~filename"])
+
+        if not self.has_images:
+            return False
+
+        if not isinstance(image, EmbeddedImage):
+            print_d("support for EmbeddedImage object only")
+            return False
+
+        bytes_to_compare = 512
+        ibytes = image.read(-bytes_to_compare)
+
+        frames = []
+        removed = False
+        for frame in audio.tags.getall("APIC"):
+            fbytes = frame.data[-min(bytes_to_compare, len(frame.data)):]
+            if fbytes == ibytes and not removed:
+                removed = True
+                continue
+            frames.append(frame)
+        if removed:
+            audio.tags.setall("APIC", frames)
+            audio.save()
+            return True
+
+        return False
+
     def get_images(self):
         """Returns a list of embedded images"""
 

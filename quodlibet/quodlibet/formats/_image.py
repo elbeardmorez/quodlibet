@@ -63,6 +63,15 @@ class ImageContainer(object):
 
         raise AudioFileError("Not supported for this format")
 
+    def remove_image(self, image):
+        """Remove an embedded image.
+
+        Raises:
+            AudioFileError
+        """
+
+        raise AudioFileError("Not supported for this format")
+
     def set_image(self, image):
         """Replaces all embedded images by the passed image.
 
