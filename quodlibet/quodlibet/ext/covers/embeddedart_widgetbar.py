@@ -17,7 +17,7 @@ from quodlibet.plugins.gui import UserInterfacePlugin
 from quodlibet.formats import EmbeddedImage
 from quodlibet.qltk import Icons, add_global_css
 from quodlibet.qltk.widgetbar import WidgetBar
-from quodlibet.qltk.x import Align
+from quodlibet.qltk.x import Align, ScrolledWindow
 from quodlibet.util import print_d, print_exc
 from quodlibet.qltk.cover import CoverImage
 from quodlibet.util.thumbnails import get_thumbnail_folder
@@ -525,13 +525,31 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.__controls_box_outer = Gtk.VBox()
         self.__controls.pack_start(self.__controls_box_outer, False, False, 10)
 
-        self.label_count_box = Gtk.HBox(spacing=2)
-        self.label_count_box.set_size_request(150, -1)
-        self.__controls_box_outer.pack_start(
-            self.label_count_box, False, False, 10)
-        label_count_prefix = Gtk.Label(_(u"Selected") + ": ")
-        self.label_count_box.pack_start(
-            label_count_prefix, False, False, 0)
+        label_count_box = Gtk.HBox(spacing=2)
+        label_count_box.set_size_request(175, 20)
+        self.__controls_box_outer.pack_start(label_count_box, False, False, 10)
+        label_count_prefix = Gtk.Label(_(u"Selection"))
+        label_count_box.pack_start(label_count_prefix, False, False, 0)
+
+        self.labels_subselect_box = Gtk.HBox()
+        label_count_box.pack_start(self.labels_subselect_box, False, False, 0)
+        self.labels_subselect_box.pack_start(Gtk.VSeparator(), False, False, 2)
+        self.label_count_subselect = Gtk.Label()
+        self.label_count_subselect.get_style_context().add_class("boldandbig1")
+        self.label_count_subtotal = Gtk.Label()
+        self.labels_subselect_box.pack_start(
+            self.label_count_subselect, False, False, 0)
+        self.labels_subselect_box.pack_start(Gtk.Label("of"), False, False, 2)
+        self.label_count_subtotal.get_style_context().add_class("boldandbig2")
+        self.labels_subselect_box.pack_start(
+            self.label_count_subtotal, False, False, 0)
+        self.labels_subselect_box.show_all()
+        self.labels_subselect_box.set_no_show_all(True)
+        self.labels_subselect_box.set_visible(False)
+
+        self.labels_select_box = Gtk.HBox()
+        label_count_box.pack_start(self.labels_select_box, False, False, 0)
+        self.labels_select_box.pack_start(Gtk.VSeparator(), False, False, 2)
         self.label_count_select = Gtk.Label()
         self.label_count_select.get_style_context().add_class("boldandbig1")
         self.label_count_box.pack_start(
@@ -558,8 +576,15 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             self.__embeddedart_on_total_count_changed)
 
         self.__controls_box = Gtk.VBox()
+        controls_align = Align(left=15, right=25)
+        controls_align.add(self.__controls_box)
+        self.__controls_scroll = ScrolledWindow()
+        self.__controls_scroll.set_policy(
+                Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.__controls_scroll.set_shadow_type(Gtk.ShadowType.NONE)
+        self.__controls_scroll.add(controls_align)
         self.__controls_box_outer.pack_start(
-            self.__controls_box, False, False, 0)
+            self.__controls_scroll, True, True, 0)
 
         single_box = Gtk.VBox(spacing=2)
         self.__controls_box.pack_start(single_box, False, False, 5)
