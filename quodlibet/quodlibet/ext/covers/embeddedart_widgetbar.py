@@ -389,6 +389,36 @@ class EmbeddedArtBox(Gtk.HBox):
             except AudioFileError:
                 print_exc()
 
+    def _remove_image(self):
+
+        for w in self.get_selected_image_widgets():
+            if not w.song.can_change_images:
+                ext = os.path.splitext(w.song['~filename'])[1][1:]
+                print_d("skipping unsupported song type %r [%s]"
+                        % (ext, w.song['~filename']))
+                continue
+
+            images = w.song.get_images()
+            if len(images) == 1:
+                try:
+                    w.song.clear_images()
+                    self._remove_widget_by_image_widget(w)
+                except AudioFileError:
+                    print_exc()
+            else:
+                # iterate and compare to find this image
+
+                fo = open(w.image.name, 'rb')
+                for image in images:
+                    if self.__file_equals_embeddedimage(fo, image):
+                        try:
+                            if not w.song.remove_image(image):
+                                print_d("failed to remove image for song %r"
+                                        % w.song)
+                        except AudioFileError:
+                            print_exc()
+                        break
+
     def _set_image(self):
 
         for w in self.get_selected_image_widgets():
@@ -516,6 +546,12 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             "button-press-event",
             lambda *_: self.__embeddedart_box._clear_images())
         self.__controls_box.pack_start(clear_button, False, False, 5)
+
+        remove_button = Gtk.Button(_(u"Remove"))
+        remove_button.connect(
+            "button-press-event",
+            lambda *_: self.__embeddedart_box._remove_image())
+        self.__controls_box.pack_start(remove_button, False, False, 5)
 
         self.__select_count = 0
         self.__total_count = 0
