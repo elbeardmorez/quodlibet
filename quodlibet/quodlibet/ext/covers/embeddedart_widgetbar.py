@@ -83,6 +83,8 @@ class EmbeddedArtBox(Gtk.HBox):
 
         self.signalbox = SignalBox()
 
+        self.__songs = None
+
         self.__covers_select_count = 0
         self.__covers_total_count = 0
 
@@ -91,6 +93,9 @@ class EmbeddedArtBox(Gtk.HBox):
         self.covers_max = 50
 
     def update(self, songs):
+
+        self.__songs = songs
+
         if not songs:
             return
 
@@ -576,7 +581,13 @@ class EmbeddedArtBox(Gtk.HBox):
 
     def _clear_images(self):
 
-        for s in [iw.song for iw in self.get_selected_image_widgets()]:
+        songs = [iw.song for iw in self.get_selected_image_widgets()]
+        if not songs:
+            songs = self.__songs
+        if not songs:
+            return
+
+        for s in songs:
             if not s.can_change_images:
                 ext = os.path.splitext(s['~filename'])[1][1:]
                 print_d("skipping unsupported song type %r [%s]"
@@ -623,9 +634,13 @@ class EmbeddedArtBox(Gtk.HBox):
 
     def _set_image(self):
 
-        for w in [w2 for w in self.get_selected_image_widgets()
-                         for w2 in w.nested]:
-            s = w.song
+        songs = [iw.song for iw in self.get_selected_image_widgets()]
+        if not songs:
+            songs = self.__songs
+        if not songs:
+            return
+
+        for s in songs:
             if not s.can_change_images:
                 ext = os.path.splitext(s['~filename'])[1][1:]
                 print_d("skipping unsupported song type %r [%s]"
@@ -644,10 +659,17 @@ class EmbeddedArtBox(Gtk.HBox):
                 continue
             try:
                 s.set_image(image)
+                self._refresh([s])
             except AudioFileError:
                 print_exc()
 
     def _add_image(self):
+
+        songs = [iw.song for iw in self.get_selected_image_widgets()]
+        if not songs:
+            songs = self.__songs
+        if not songs:
+            return
 
         pathfiles = self._choose_art_files()
         if not pathfiles:
@@ -661,7 +683,7 @@ class EmbeddedArtBox(Gtk.HBox):
                 continue
             images.append(image)
 
-        for s in [iw.song for iw in self.get_selected_image_widgets()]:
+        for s in songs:
             if not s.can_change_images:
                 ext = os.path.splitext(s['~filename'])[1][1:]
                 print_d("skipping unsupported song type %r [%s]"
