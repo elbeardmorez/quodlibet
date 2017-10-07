@@ -846,31 +846,31 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         label_single_warning.set_tooltip_text(
             _(u"WARNING: this will delete all existing embedded images"))
         single_box.pack_start(label_single_warning, False, False, 0)
-        single_button = Gtk.Button(_(u"Single"))
-        single_button.connect(
+        self.__single_button = Gtk.Button(_(u"Single"))
+        self.__single_button.connect(
             "button-press-event",
             lambda *_: self.__embeddedart_box._set_image())
-        single_box.pack_start(single_button, False, False, 0)
+        single_box.pack_start(self.__single_button, False, False, 0)
 
-        clear_button = Gtk.Button(_(u"Clear"))
-        clear_button.connect(
+        self.__clear_button = Gtk.Button(_(u"Clear"))
+        self.__clear_button.connect(
             "button-press-event",
             lambda *_: self.__embeddedart_box._clear_images())
-        self.__controls_box.pack_start(clear_button, False, False, 5)
+        self.__controls_box.pack_start(self.__clear_button, False, False, 5)
 
-        remove_button = Gtk.Button(_(u"Remove"))
-        remove_button.connect(
+        self.__remove_button = Gtk.Button(_(u"Remove"))
+        self.__remove_button.connect(
             "button-press-event",
             lambda *_: self.__embeddedart_box._remove_image())
-        self.__controls_box.pack_start(remove_button, False, False, 5)
+        self.__controls_box.pack_start(self.__remove_button, False, False, 5)
 
-        add_button = Gtk.Button(_(u"Add"))
-        add_button.connect(
+        self.__add_button = Gtk.Button(_(u"Add"))
+        self.__add_button.connect(
             "button-press-event",
             lambda *_: self.__embeddedart_box._add_image())
-        self.__controls_box.pack_start(add_button, False, False, 5)
+        self.__controls_box.pack_start(self.__add_button, False, False, 5)
 
-        collapse_ccb = ConfigCheckButton("Collapse", "plugins",
+        collapse_ccb = ConfigCheckButton(_(u"Collapse"), "plugins",
                                          plugin_id + "_collapsed_view",
                                          populate=True)
         collapse_ccb.set_tooltip_text(_(u"collapse compatible images"))
@@ -908,10 +908,13 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
                 if CONFIG.collapsed_view:
                     self.labels_subselect_box.set_visible(True)
 
-        map(lambda w, s=False if self.__select_count == 0
-                              else True:
-                w.set_sensitive(s),
-            self.__controls_box.get_children())
+        sensitive = True if self.__select_count else False
+        self.__remove_button.set_sensitive(sensitive)
+        sensitive = True if self.__total_count else False
+        self.__clear_button.set_sensitive(sensitive)
+        sensitive = True if self.__noselect_count else False
+        self.__single_button.set_sensitive(sensitive)
+        self.__add_button.set_sensitive(sensitive)
 
     def __embeddedart_on_subselect_count_changed(self, object, count):
         self.__subselect_count = count
