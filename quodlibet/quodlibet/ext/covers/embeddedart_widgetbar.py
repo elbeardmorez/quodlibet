@@ -96,10 +96,11 @@ class EmbeddedArtBox(Gtk.HBox):
 
         self.__songs = songs
 
+        self.__clear_covers()
+
         if not songs:
             return
 
-        self.__clear_covers()
         for song in songs:
             imageitems = self.__get_artwork(song)
             if len(self.image_widgets) == self.covers_max:
