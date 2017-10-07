@@ -693,7 +693,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
             for image in images:
                 try:
-                    s.add_image(image)
+                    s.add_image(image, strict=False)
                 except AudioFileError:
                     print_exc()
 

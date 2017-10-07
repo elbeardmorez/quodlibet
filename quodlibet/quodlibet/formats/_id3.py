@@ -544,7 +544,7 @@ class ID3File(AudioFile):
         with translate_errors():
             audio.save()
 
-    def add_image(self, image, type_=APICType.OTHER):
+    def add_image(self, image, type_=APICType.OTHER, strict=True):
         """Embedded passed image."""
 
         with translate_errors():
@@ -563,7 +563,7 @@ class ID3File(AudioFile):
         frame = mutagen.id3.APIC(
             encoding=3, mime=image.mime_type, type=type_,
             desc=u"", data=data)
-        tag.add(frame)
+        tag.add(frame, strict=strict)
 
         with translate_errors():
             audio.save()
