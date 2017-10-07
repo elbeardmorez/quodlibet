@@ -329,6 +329,11 @@ class EmbeddedArtBox(Gtk.HBox):
             def collapsed(widget, visible):
                 if visible:
                     # (re)build song list
+                    def album_toggled(w, name, active):
+                        for iw, w in w.songlist.widgets.items():
+                            if iw.song['album'] == name:
+                                w.set_active(active)
+
                     def song_toggled(w, w2, active):
                         w.nested_active[w2] = active
                         self.update_subselect_count()
@@ -339,12 +344,28 @@ class EmbeddedArtBox(Gtk.HBox):
                     widget.get_parent().check_resize()
                     for k, g in groupby(widget.nested,
                                         lambda w: w.song['album']):
-                        album_label = Gtk.Label(k)
-                        album_label.set_alignment(0.0, 0.5)
-                        album_label.get_style_context()\
+                        album_cb = Gtk.CheckButton(k)
+                        album_cb.get_children()[0].get_style_context()\
                             .add_class("boldandbig2")
-                        widget.songlist.pack_start(album_label,
+                        if gtk_version >= (3, 20):
+                            add_css(album_cb, """
+                                .checkbutton indicator {
+                                    min-height: 6px;
+                                    min-width: 6px;
+                                }""", True)
+                        else:
+                            add_css(album_cb, """
+                                GtkCheckButton {
+                                    -GtkCheckButton-indicator-size: 6;
+                                }""", True)
+                        album_cb.connect("toggled",
+                            lambda w, iw=widget, *_:
+                                album_toggled(iw, w.get_children()[0]
+                                              .get_text(), w.get_active()))
+
+                        widget.songlist.pack_start(album_cb,
                                                    False, False, 2)
+                        active_all = True
                         for iw2 in sorted(g, key=lambda iw:
                                                         iw.song("~#track")):
                             s = iw2.song
@@ -360,7 +381,10 @@ class EmbeddedArtBox(Gtk.HBox):
                             cb.connect("toggled",
                                 lambda w, iw=widget, iw2=iw2, *_:
                                     song_toggled(iw, iw2, w.get_active()))
-                            cb.set_active(widget.nested_active[iw2])
+                            active = widget.nested_active[iw2]
+                            cb.set_active(active)
+                            if active_all:
+                                active_all = active
                             widget.songlist.pack_start(cb_align,
                                                        False, False, 0)
                             widget.songlist.widgets[iw2] = cb
@@ -375,6 +399,7 @@ class EmbeddedArtBox(Gtk.HBox):
                                     GtkCheckButton {
                                         -GtkCheckButton-indicator-size: 10;
                                     }""", True)
+                        album_cb.set_active(active_all)
 
                     widget.label.hide()
                     widget.songlist.get_parent().show_all()
