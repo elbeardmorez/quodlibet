@@ -773,6 +773,9 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.labels_subselect_box.show_all()
         self.labels_subselect_box.set_no_show_all(True)
         self.labels_subselect_box.set_visible(False)
+        self.labels_subselect_box.set_tooltip_text(
+            _(u"selected songs count/total under selected embedded art items"
+               "\n[collapsed view only]"))
 
         self.labels_select_box = Gtk.HBox()
         label_count_box.pack_start(self.labels_select_box, False, False, 0)
@@ -789,6 +792,8 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.labels_select_box.show_all()
         self.labels_select_box.set_no_show_all(True)
         self.labels_select_box.set_visible(False)
+        self.labels_select_box.set_tooltip_text(
+            _(u"selected embedded art items count/total"))
 
         self.labels_noselect_box = Gtk.HBox()
         label_count_box.pack_start(self.labels_noselect_box, False, False, 0)
@@ -800,6 +805,8 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         self.labels_noselect_box.show_all()
         self.labels_noselect_box.set_no_show_all(True)
         self.labels_noselect_box.set_visible(False)
+        self.labels_noselect_box.set_tooltip_text(
+            _(u"selected browser songs count"))
 
         align_covers = Gtk.Alignment(xalign=0.5, xscale=1.0)
         self.__embeddedart_box = EmbeddedArtBox()
