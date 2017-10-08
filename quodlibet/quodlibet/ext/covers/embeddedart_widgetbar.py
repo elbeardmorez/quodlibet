@@ -102,11 +102,15 @@ class EmbeddedArtBox(Gtk.HBox):
             return
 
         for song in songs:
-            imageitems = self.__get_artwork(song)
             if len(self.image_widgets) == self.covers_max:
                 print_d("covers max hit, ignoring then rest!")
                 break
-            self.__generate_covers(imageitems, song)
+            widgets = self.__generate_covers(song)
+            for w in widgets:
+                self.pack_start(w, False, False, 2)
+                self.image_widgets.append(w.image_widget)
+
+        self.show_all()
 
         self.select_count = 0
         self.total_count = len(self.image_widgets)
@@ -246,12 +250,16 @@ class EmbeddedArtBox(Gtk.HBox):
 
         self.update_counts()
 
-    def __generate_covers(self, imageitems, song):
+    def __generate_covers(self, song):
+
+        imageitems = self.__get_artwork(song)
+
         if len(self.image_widgets) + len(imageitems) >= self.covers_max:
             if self.image_widgets < self.covers_max:
                 imageitems = imageitems[:self.covers_max -
                                          len(self.image_widgets)]
 
+        widgets = []
         for image in imageitems:
 
             title = "<b>" + GLib.markup_escape_text(image.album) + "</b>"
@@ -442,11 +450,9 @@ class EmbeddedArtBox(Gtk.HBox):
             image_widget_outer_align.connect(
                 "button-press-event", highlight_toggle_cb)
 
-            self.pack_start(image_widget_outer_align, False, False, 2)
+            widgets.append(image_widget_outer_align)
 
-            self.image_widgets.append(image_widget)
-
-        self.show_all()
+        return widgets
 
     def __get_artwork(self, song):
         # generate art set for path
