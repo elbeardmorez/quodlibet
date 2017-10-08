@@ -487,22 +487,13 @@ class EmbeddedArtBox(Gtk.HBox):
                              % (plugin_id, path_thumbs))
 
             if os.path.exists(path_thumbs):
-                types = {}
-                path_hash = hashlib.md5(pathfile.encode("utf8")).hexdigest()
                 # ignore some mime-types, links..
                 mime_ignore = ['-->']
                 for i in images:
                     if i.mime_type in mime_ignore:
                         continue
-                    itype = self.clean_embedded_art_type(str(i.type))
-                    if itype in types:
-                        suffix = 2
-                        while itype + str(suffix) in types:
-                            suffix += 1
-                        itype = itype + str(suffix)
-                    types[itype] = True
-                    key = path_hash + "_" + itype
-                    f = os.path.join(path_thumbs, key)
+                    data_hash = hashlib.md5(i.read()).hexdigest()
+                    f = os.path.join(path_thumbs, data_hash)
                     dump = False
                     if os.path.exists(f):
                         fo = open(f, 'rb')
@@ -515,7 +506,6 @@ class EmbeddedArtBox(Gtk.HBox):
                     if dump and not self.dump_file(i, f):
                         continue
                     width, height = self.get_info(f)
-                    data_hash = hashlib.md5(i.read()).hexdigest()
                     imageitems.append(
                         ImageItem(f, pathfile, artist, album,
                                   width, height, False, data_hash))
