@@ -117,6 +117,257 @@ class EmbeddedArtBox(Gtk.HBox):
         if CONFIG.collapsed_view:
             self._collapse_toggle(CONFIG.collapsed_view)
 
+    def _refresh(self, songs):
+
+        # the root iw's nested array will hold either a single iw
+        # (itself), or a set of iws of which our song is one of.
+        # in 'collapsed view' the outer container of the root iw is
+        # either visible (nested set contains itself, and other 'nested'
+        # iws which all have HIDDEN outer containers), or hidden (nested
+        # set contains itself only)
+
+        for s in songs:
+            # old, ignore root/nested duplicates
+            widgets_old = list(set(iw
+                                   for outer in self.get_children()
+                                       for iw in outer.image_widget.nested
+                                           if iw.song == s))
+            image_hashes_old = {}
+            for iw in widgets_old:
+                if not iw.image.data_hash in image_hashes_old:
+                    image_hashes_old[iw.image.data_hash] = 1
+                    continue
+                image_hashes_old[iw.image.data_hash] += 1
+
+            # new
+            widgets_new = [w.image_widget for w in self.__generate_covers(s)]
+            image_hashes_new = {}
+            for iw in widgets_new:
+                if not iw.image.data_hash in image_hashes_new:
+                    image_hashes_new[iw.image.data_hash] = 1
+                    continue
+                image_hashes_new[iw.image.data_hash] += 1
+
+            # 'widgets_old' will contain
+            # # flat mode
+            # -this song's set of iws, 1 iw per image
+            # # collapsed mode
+            # -this song's set of album art, one or more of which may me in
+            #  use as the container for all iws using the image. however, if
+            #  none of this song's iws have been used as roots, then there
+            #  will also be additional (foreign song) iws in the set, whose
+            #  art is the same as our song's
+
+            # 'widgets_new' will contain
+            # -a straight forward set of image widgets which represent the
+            #  new state of the modified song. we ultimately just need to
+            #  ensure that these and these alone are represented in the ui
+
+            # drop missing
+            # note: in collapsed view mode an iws nested set can contain
+            # -multiple instances from the same song (duplicate art!)
+            # -multiple songs using the same art from the same or different
+            #  albums
+            for idx in xrange(len(widgets_old) - 1, -1, -1):
+                iw = widgets_old[idx]
+                outer = iw.outer
+                iw_root = iw
+                if iw.parent:
+                    iw_root = iw.parent
+                    outer = iw_root.outer
+                if not outer.get_visible():
+                    continue
+                if not iw.selected():
+                    continue
+                nested = iw.is_nested and outer.get_visible()
+
+                hash_ = iw.image.data_hash
+                if not hash_ in image_hashes_new or \
+                    image_hashes_old[hash_] > image_hashes_new[hash_]:
+                    # remove selected
+                    if nested:
+                        for idx2 in xrange(len(iw_root.nested) - 1, -1, -1):
+                            if iw_root.nested[idx2] == iw:
+                                self.__remove_nested_image_widget(iw_root, iw)
+                                # remove its (hidden) outer
+                                self.remove(iw.outer)
+                                self.image_widgets.remove(iw)
+                                image_hashes_old[hash_] -= 1
+                                del widgets_old[idx]
+                                break
+
+                        if iw_root.song != s:
+                            # nested entry removed from foreign song container
+                            continue
+
+                    else:
+                        self.remove(outer)
+                        self.image_widgets.remove(iw)
+                        image_hashes_old[hash_] -= 1
+                        del widgets_old[idx]
+                        iw.nested.remove(iw)
+                        del iw.nested_active[iw]
+
+                        if iw.nested:
+                            # container not empty, but all references to this
+                            # image from the current song have gone so we need
+                            # to remove this outer by first shifting the
+                            # remaining nested set to the next valid entry's
+                            # container
+                            idx = 0
+                            iw_next = iw.nested[idx]
+                            while iw_next.song == s:
+                                idx += 1
+                                iw_next = iw.nested[idx]
+                            iw_next.nested = iw.nested
+                            iw_next.nested_active = iw.nested_active
+                            for w in iw_next.nested:
+                                w.parent = iw_next
+                            iw_next.collapsed(iw_next, CONFIG.collapsed_view)
+                            # set selected
+                            iw_next.highlight_toggle(iw_next,
+                                                     force_highlight=False)
+                            # ensure visible
+                            iw_next.outer.set_visible(True)
+
+            # insert new
+            # where do we add the new image?
+            # it we're in collapsed view, we have to first try and find
+            # other instances of it, only one of which will be visible
+            # (any others should be nested within this)
+            # if it doesn't exist, then add next to any existing images
+            # for the song
+            idx = 0
+            for w in self.get_children():
+                if w.image_widget.song == s:
+                    idx = self.child_get_property(w, 'position')
+                    break
+
+            image_hashes_global = {}
+            for iw in widgets_new:
+                hash_ = iw.image.data_hash
+                if not hash_ in image_hashes_old or \
+                   image_hashes_old[hash_] < image_hashes_new[hash_]:
+                    if CONFIG.collapsed_view:
+                        if not image_hashes_global:
+                            for outer in self.get_children():
+                                if not outer.get_visible():
+                                    continue
+                                iw_root = outer.image_widget
+                                image_hashes_global[
+                                    iw_root.image.data_hash] = iw_root
+                        iw.collapsed(iw, True)
+                        if iw.image.data_hash in image_hashes_global:
+                            # add nested
+                            iw.is_nested = True
+                            iw_root = image_hashes_global[iw.image.data_hash]
+                            self.__add_nested_image_widget(iw_root, iw)
+
+                    # add
+                    self.pack_start(iw.outer, False, False, 2)
+                    self.reorder_child(iw.outer, idx)
+                    self.image_widgets.append(iw)
+                    iw.outer.show_all()
+                    iw.outer.set_visible(not iw.is_nested)
+                    if not hash_ in image_hashes_old:
+                        image_hashes_old[hash_] = 0
+                    image_hashes_old[hash_] += 1
+
+        self.update_counts()
+
+    def __get_nested_album(self, iw_root, name):
+        for w in iw_root.songlist.get_children():
+            if isinstance(w, Gtk.CheckButton) and w.album == name:
+                return w
+        return self.__add_nested_album(iw_root, name)
+
+    def __add_nested_album(self, iw_root, name):
+
+        cb = Gtk.CheckButton(name)
+        cb.get_children()[0].get_style_context()\
+            .add_class("boldandbig2")
+        if gtk_version >= (3, 20):
+            add_css(cb, """
+                .checkbutton indicator {
+                    min-height: 6px;
+                    min-width: 6px;
+                }""", True)
+        else:
+            add_css(cb, """
+                GtkCheckButton {
+                    -GtkCheckButton-indicator-size: 6;
+                }""", True)
+        cb.connect("toggled",
+            lambda w, iw=iw_root, *_:
+                self.__nested_album_toggled(iw, w.get_children()[0]
+                    .get_text(), w.get_active()))
+
+        iw_root.songlist.pack_start(cb, False, False, 2)
+        entries_box = Gtk.VBox(spacing=1)
+        entries_align = Align(left=10)
+        entries_align.add(entries_box)
+        iw_root.songlist.pack_start(entries_align, False, False, 2)
+
+        cb.album = name
+        cb.box = entries_box
+
+        return cb
+
+    def __add_nested_image_widget(self, iw_root, iw, entries_box=None):
+
+        if not entries_box:
+            entries_box = \
+                self.__get_nested_album(iw_root, iw.song['album']).box
+
+        iw.parent = iw_root
+        if not iw in iw_root.nested_active:
+            iw_root.nested.append(iw)
+            iw_root.nested_active[iw] = False
+
+        s = iw.song
+        track = s('~#track')
+        label = "%s%s" % (str(track) + ' | '
+                          if track else "",
+                          s['title'])
+        cb = Gtk.CheckButton(label)
+        cb.get_child().set_line_wrap(True)
+        cb.set_tooltip_markup(s['~filename'])
+        cb.connect("toggled",
+            lambda w, iw_root=iw_root, iw=iw, *_:
+                self.__nested_song_toggled(iw_root, iw, w.get_active()))
+        active = False
+        active = iw_root.nested_active[iw]
+        cb.set_active(active)
+        entries_box.pack_start(cb, False, False, 0)
+        iw_root.songlist.widgets[iw] = cb
+        if gtk_version >= (3, 20):
+            add_css(cb, """
+                .checkbutton indicator {
+                    min-height: 10px;
+                    min-width: 10px;
+                }""", True)
+        else:
+            add_css(cb, """
+                GtkCheckButton {
+                    -GtkCheckButton-indicator-size: 10;
+                }""", True)
+        cb.set_visible(True)
+
+        return cb
+
+    def __remove_nested_image_widget(self, iw_root, iw):
+
+        album = iw.song['album']
+        album_cb = self.__get_nested_album(iw_root, album)
+        box = album_cb.box
+        iw_root.nested.remove(iw)
+        del iw_root.nested_active[iw]
+        box.remove(iw_root.songlist.widgets[iw])
+        if not box.get_children():
+            # remove album cb and container
+            iw_root.songlist.remove(box.get_parent())  # align
+            iw_root.songlist.remove(album_cb)
+
     @property
     def subselect_count(self):
         return self.__covers_subselect_count
@@ -164,7 +415,7 @@ class EmbeddedArtBox(Gtk.HBox):
     def get_selected_image_widgets(self):
         return [iw for w in self.get_selected_widgets()
                        for iw in w.image_widget.nested
-                           if w.image_widget.nested_active[iw]]
+                           if iw.selected(iw)]
 
     def update_subselect_count(self):
         self.subselect_count = \
@@ -220,8 +471,12 @@ class EmbeddedArtBox(Gtk.HBox):
             # songs sharing the same image share a single container
             for w in self.get_children():
                 iw = w.image_widget
+                iw.is_nested = False
+                iw.parent = None
                 h = iw.image.data_hash
                 if h in data_hashes:
+                    iw.is_nested = True
+                    iw.parent = data_hashes[h]
                     data_hashes[h].nested.append(iw)
                     data_hashes[h].nested_active[iw] = iw.is_selected
                     w.hide()
@@ -242,13 +497,23 @@ class EmbeddedArtBox(Gtk.HBox):
                          for iw2 in w.image_widget.nested}
             for w in self.get_children():
                 iw = w.image_widget
+                iw.is_nested = False
                 iw.nested = [iw]
+                iw.nested_active[iw] = iw_active[iw]
+                iw.highlight_toggle(iw, iw_active[iw])
                 iw.collapsed(iw, False)
-                if iw in iw_active:
-                    iw.highlight_toggle(iw, iw_active[iw])
                 w.show()
 
         self.update_counts()
+
+    def __nested_album_toggled(self, w, name, active):
+        for iw, w in w.songlist.widgets.items():
+            if iw.song['album'] == name:
+                w.set_active(active)
+
+    def __nested_song_toggled(self, w, w2, active):
+        w.nested_active[w2] = active
+        self.update_subselect_count()
 
     def __generate_covers(self, song):
 
@@ -300,6 +565,8 @@ class EmbeddedArtBox(Gtk.HBox):
             image_widget.image_name = name
             image_widget.image_size = size
             image_widget.is_selected = False
+            image_widget.is_nested = False
+            image_widget.parent = None
 
             image_widget_cover_box.pack_start(coverimage, True, True, 2)
 
@@ -334,86 +601,45 @@ class EmbeddedArtBox(Gtk.HBox):
             image_widget.hborder = image_widget_hborder
             image_widget.highlight_toggle = highlight_toggle
 
+            def selected(widget):
+                if CONFIG.collapsed_view:
+                    if widget.is_nested:
+                        return widget.parent.is_selected and \
+                                   widget.parent.nested_active[widget]
+                    else:
+                        return widget.nested_active[widget]
+                else:
+                    return widget.is_selected
+
+            image_widget.selected = selected
+
             def collapsed(widget, visible):
                 if visible:
                     # (re)build song list
-                    def album_toggled(w, name, active):
-                        for iw, w in w.songlist.widgets.items():
-                            if iw.song['album'] == name:
-                                w.set_active(active)
-
-                    def song_toggled(w, w2, active):
-                        w.nested_active[w2] = active
-                        self.update_subselect_count()
-
                     for w in widget.songlist.get_children():
                         widget.songlist.remove(w)
                     widget.songlist.set_size_request(200, -1)
-                    widget.get_parent().check_resize()
                     for k, g in groupby(widget.nested,
                                         lambda w: w.song['album']):
-                        album_cb = Gtk.CheckButton(k)
-                        album_cb.get_children()[0].get_style_context()\
-                            .add_class("boldandbig2")
-                        if gtk_version >= (3, 20):
-                            add_css(album_cb, """
-                                .checkbutton indicator {
-                                    min-height: 6px;
-                                    min-width: 6px;
-                                }""", True)
-                        else:
-                            add_css(album_cb, """
-                                GtkCheckButton {
-                                    -GtkCheckButton-indicator-size: 6;
-                                }""", True)
-                        album_cb.connect("toggled",
-                            lambda w, iw=widget, *_:
-                                album_toggled(iw, w.get_children()[0]
-                                              .get_text(), w.get_active()))
+                        album_cb = self.__add_nested_album(widget, k)
 
-                        widget.songlist.pack_start(album_cb,
-                                                   False, False, 2)
                         active_all = True
                         for iw2 in sorted(g, key=lambda iw:
-                                                        iw.song("~#track")):
-                            s = iw2.song
-                            track = s('~#track')
-                            label = "%s%s" % (str(track) + ' | '
-                                              if track else "",
-                                              s['title'])
-                            cb = Gtk.CheckButton(label)
-                            cb_align = Align(left=10)
-                            cb_align.add(cb)
-                            cb.get_child().set_line_wrap(True)
-                            cb.set_tooltip_markup(s['~filename'])
-                            cb.connect("toggled",
-                                lambda w, iw=widget, iw2=iw2, *_:
-                                    song_toggled(iw, iw2, w.get_active()))
-                            active = widget.nested_active[iw2]
-                            cb.set_active(active)
+                                                     iw.song("~#track")):
+                            cb = self.__add_nested_image_widget(widget, iw2)
                             if active_all:
-                                active_all = active
-                            widget.songlist.pack_start(cb_align,
-                                                       False, False, 0)
-                            widget.songlist.widgets[iw2] = cb
-                            if gtk_version >= (3, 20):
-                                add_css(cb, """
-                                    .checkbutton indicator {
-                                        min-height: 10px;
-                                        min-width: 10px;
-                                    }""", True)
-                            else:
-                                add_css(cb, """
-                                    GtkCheckButton {
-                                        -GtkCheckButton-indicator-size: 10;
-                                    }""", True)
+                                active_all = cb.get_active()
+
                         album_cb.set_active(active_all)
 
                     widget.label.hide()
                     widget.songlist.get_parent().show_all()
                 else:
                     widget.nested = [widget]
-                    widget.nested_active = {widget: True}
+                    active = False
+                    if widget in widget.nested_active:
+                        active = widget.nested_active[widget]
+                    widget.nested_active = {widget: active}
                     widget.songlist.set_size_request(-1, -1)
                     widget.songlist.hide()
                     widget.label.show()
@@ -431,6 +657,8 @@ class EmbeddedArtBox(Gtk.HBox):
                 " [" + name + "]" if CONFIG.name_in_label else "",
                 " [" + size + "]" if CONFIG.size_in_label else "")
             label_desc = Gtk.Label(desc)
+            label_desc.set_no_show_all(True)
+            label_desc.set_visible(True)
             label_desc.set_line_wrap(True)
             label_desc.set_use_markup(True)
             label_desc.set_tooltip_markup(image.path)
@@ -565,42 +793,6 @@ class EmbeddedArtBox(Gtk.HBox):
             if tooltip:
                 box.cover.set_tooltip_markup('\n'.join(tooltip))
 
-    def _remove_widget_by_image_widget(self, image_widget):
-        self.remove(image_widget.outer)
-        self.image_widgets.remove(image_widget)
-        self.update_select_count()
-        self.total_count = len(self.image_widgets)
-
-    def _remove_widget_by_song(self, song):
-        for outer in self.get_children():
-            w = outer.image_widget
-            if len(w.nested) == 1:
-                if w.nested[0].song == song:
-                    self._remove_widget_by_image_widget(w)
-            else:
-                for idx in xrange(len(w.nested) - 1, -1, -1):
-                    if w.nested[idx].song == song:
-                        del w.nested[idx]
-                        del w.nested_active[w]
-                        w.songlist.remove(w.songlist.widgets[w])
-                        del w.songlist.widgets[w]
-
-    def _remove_widget_by_image(self, image):
-        for outer in self.get_children():
-            w = outer.image_widget
-            if not w.image == image:
-                continue
-
-            if len(w.nested) == 1:
-                self._remove_widget_by_image_widget(w)
-            else:
-                for idx in xrange(len(w.nested) - 1, -1, -1):
-                    if w.nesteds[idx].image == image:
-                        del w.nested[idx]
-                        del w.nested_active[w]
-                        w.songlist.remove(w.songlist.widgets[w])
-                        del w.songlist.widgets[w]
-
     def _clear_images(self):
 
         songs = [iw.song for iw in self.get_selected_image_widgets()]
@@ -617,7 +809,7 @@ class EmbeddedArtBox(Gtk.HBox):
                 continue
             try:
                 s.clear_images()
-                self._remove_widget_by_song(s)
+                self._refresh([s])
             except AudioFileError:
                 print_exc()
 
@@ -635,7 +827,7 @@ class EmbeddedArtBox(Gtk.HBox):
             if len(images) == 1:
                 try:
                     s.clear_images()
-                    self._remove_widget_by_song(s)
+                    self._refresh([s])
                 except AudioFileError:
                     print_exc()
             else:
@@ -646,7 +838,7 @@ class EmbeddedArtBox(Gtk.HBox):
                         continue
                     try:
                         if s.remove_image(image):
-                            self._remove_widget_by_image(image)
+                            self._refresh([s])
                         else:
                             print_d("failed to remove image for song %r"
                                     % s)
@@ -717,6 +909,8 @@ class EmbeddedArtBox(Gtk.HBox):
                     s.add_image(image, strict=False)
                 except AudioFileError:
                     print_exc()
+
+            self._refresh([s])
 
     def _choose_art_files(self):
         image_types = ['jpg', 'png']
