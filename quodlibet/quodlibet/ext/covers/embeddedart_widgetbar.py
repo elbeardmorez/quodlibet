@@ -44,20 +44,6 @@ CONFIG = Config()
 DOUBLE_CLICK_TIMEOUT = 200
 
 
-class SignalBox(GObject.GObject):
-
-    __gsignals__ = {
-        "subselect-count-changed":
-        (GObject.SignalFlags.RUN_LAST, None, [int]),
-        "subtotal-count-changed":
-        (GObject.SignalFlags.RUN_LAST, None, [int]),
-        "select-count-changed":
-        (GObject.SignalFlags.RUN_LAST, None, [int]),
-        "total-count-changed":
-        (GObject.SignalFlags.RUN_LAST, None, [int])
-    }
-
-
 class ImageItem(object):
     def __init__(self, name, path, artist, album,
                  width, height, external, data_hash):
@@ -74,6 +60,300 @@ class ImageItem(object):
         return "|".join([self.artist, self.album, str(self.external)])
 
 
+class ImageWidgetSignalBox(GObject.GObject):
+
+    __gsignals__ = {
+        "subselect-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, []),
+        "select-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, []),
+    }
+
+
+class ImageWidget(Gtk.HBox):
+
+    def __init__(self, image, song):
+        super(ImageWidget, self).__init__()
+
+        self.signalbox = ImageWidgetSignalBox()
+
+        name = os.path.splitext(os.path.basename(image.name))[0] \
+                   .split('_')[-1]
+        title = "<b>" + GLib.markup_escape_text(image.album) + "</b>"
+        size = "x".join([str(image.width), str(image.height)])
+
+        coverimage = CoverImage(resize=True)
+        coverimage.set_song(song)
+        coverimage.cover_click_cb = self.__cover_click
+
+        fsn = path2fsn(image.name)
+        fo = open(fsn, "rb")
+        coverimage.set_image(fo, name, image.external)
+
+        self.image = image
+        self.song = song
+        self.nested = [self]
+        self.nested_active = {self: False}
+        self.cover = coverimage
+        self.image_title = title
+        self.image_name = name
+        self.image_size = size
+        self.is_selected = False
+        self.is_nested = False
+        self.parent = None
+
+        iw_cover_box = Gtk.VBox()
+        self.pack_start(iw_cover_box, False, True, 2)
+        iw_songlist_scroll = ScrolledWindow()
+        iw_songlist_scroll.set_policy(
+            Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        iw_songlist_scroll.set_shadow_type(Gtk.ShadowType.NONE)
+
+        iw_songlist_box = Gtk.VBox()
+        iw_songlist_scroll.add(iw_songlist_box)
+        iw_songlist_scroll.show_all()
+
+        self.songlist = iw_songlist_box
+        self.songlist.widgets = {}
+        self.pack_start(iw_songlist_scroll, False, True, 0)
+
+        iw_cover_box.pack_start(coverimage, True, True, 2)
+
+        iw_hborder = Gtk.HBox()
+        iw_hborder.pack_start(self, True, True, 3)
+        iw_vborder = Gtk.VBox()
+        iw_vborder.pack_start(iw_hborder, True, True, 3)
+
+        iw_outer = Gtk.EventBox()
+        iw_outer.add(iw_vborder)
+
+        self.vborder = iw_vborder
+        self.hborder = iw_hborder
+
+        tooltip = []
+        if CONFIG.size_in_tooltip:
+            tooltip.append(size)
+        if tooltip:
+            coverimage.set_tooltip_markup('\n'.join(tooltip))
+
+        desc = str.format("%s%s%s") % (
+            title,
+            " [" + name + "]" if CONFIG.name_in_label else "",
+            " [" + size + "]" if CONFIG.size_in_label else "")
+        label_desc = Gtk.Label(desc)
+        label_desc.set_no_show_all(True)
+        label_desc.set_visible(True)
+        label_desc.set_line_wrap(True)
+        label_desc.set_use_markup(True)
+        label_desc.set_tooltip_markup(image.path)
+        self.label = label_desc
+        iw_cover_box.pack_start(label_desc, False, True, 4)
+
+        iw_outer_align = Align(bottom=15)
+        iw_outer_align.add(iw_outer)
+        self.outer = iw_outer_align
+        self.outer.connect("button-press-event", self.highlight_toggle_cb)
+
+        # access
+        coverimage.box = self
+        self.outer.image_widget = self
+
+    def highlight_toggle_cb(self, event, *data):
+        self.image_widget.highlight_toggle()
+
+    def highlight_toggle(self, force_highlight=None):
+        scv = self.vborder.get_style_context()
+        sch = self.hborder.get_style_context()
+        if force_highlight is False or \
+            (scv.has_class('highlightbox') and
+             force_highlight is not True):
+            scv.remove_class('highlightbox')
+            sch.remove_class('highlightbox')
+            self.is_selected = False
+        else:
+            if not scv.has_class('highlightbox'):
+                scv.add_class('highlightbox')
+                sch.add_class('highlightbox')
+            self.is_selected = True
+        self.signalbox.emit('select-count-changed')
+        self.signalbox.emit('subselect-count-changed')
+
+    def selected(self):
+        if CONFIG.collapsed_view:
+            if self.is_nested:
+                return self.parent.is_selected and \
+                           self.parent.nested_active[self]
+            else:
+                return self.nested_active[self]
+        else:
+            return self.is_selected
+
+    def collapsed(self, visible):
+        if visible:
+            # (re)build song list
+            for w in self.songlist.get_children():
+                self.songlist.remove(w)
+            self.songlist.set_size_request(200, -1)
+            for k, g in groupby(self.nested,
+                                lambda w: w.song['album']):
+                album_cb = self.__add_nested_album(self, k)
+
+                active_all = True
+                for iw in sorted(g, key=lambda iw2: iw2.song("~#track")):
+                    cb = self._add_nested_image_widget(self, iw)
+                    if active_all:
+                        active_all = cb.get_active()
+
+                album_cb.set_active(active_all)
+
+            self.label.hide()
+            self.songlist.get_parent().show_all()
+        else:
+            self.nested = [self]
+            active = False
+            if self in self.nested_active:
+                active = self.nested_active[self]
+            self.nested_active = {self: active}
+            self.songlist.set_size_request(-1, -1)
+            self.songlist.hide()
+            self.label.show()
+
+    def __cover_click_single(self, coverimage):
+        if self.__double_clicked:
+            return False
+        coverimage.box.highlight_toggle()
+        return False
+
+    def __cover_click_double(self, coverimage):
+        coverimage._show_cover()
+
+    def __cover_click(self, coverimage, event):
+        if event.type == Gdk.EventType.BUTTON_PRESS:
+            self.__double_clicked = False
+            GLib.timeout_add(DOUBLE_CLICK_TIMEOUT,
+                             self.__cover_click_single, coverimage)
+        elif event.type == Gdk.EventType._2BUTTON_PRESS:
+            self.__double_clicked = True
+            self.__cover_click_double(coverimage)
+        return True
+
+    def __nested_album_toggled(self, w, name, active):
+        for iw, w in w.songlist.widgets.items():
+            if iw.song['album'] == name:
+                w.set_active(active)
+
+    def __nested_song_toggled(self, w, w2, active):
+        w.nested_active[w2] = active
+        self.signalbox.emit('subselect-count-changed')
+
+    def __get_nested_album(self, iw_root, name):
+        for w in iw_root.songlist.get_children():
+            if isinstance(w, Gtk.CheckButton) and w.album == name:
+                return w
+        return self.__add_nested_album(iw_root, name)
+
+    def __add_nested_album(self, iw_root, name):
+
+        cb = Gtk.CheckButton(name)
+        cb.get_children()[0].get_style_context()\
+            .add_class("boldandbig2")
+        if gtk_version >= (3, 20):
+            add_css(cb, """
+                .checkbutton indicator {
+                    min-height: 6px;
+                    min-width: 6px;
+                }""", True)
+        else:
+            add_css(cb, """
+                GtkCheckButton {
+                    -GtkCheckButton-indicator-size: 6;
+                }""", True)
+        cb.connect("toggled",
+            lambda w, iw=iw_root, *_:
+                self.__nested_album_toggled(iw, w.get_children()[0]
+                    .get_text(), w.get_active()))
+
+        iw_root.songlist.pack_start(cb, False, False, 2)
+        entries_box = Gtk.VBox(spacing=1)
+        entries_align = Align(left=10)
+        entries_align.add(entries_box)
+        iw_root.songlist.pack_start(entries_align, False, False, 2)
+
+        cb.album = name
+        cb.box = entries_box
+
+        return cb
+
+    def _add_nested_image_widget(self, iw_root, iw, entries_box=None):
+
+        if not entries_box:
+            entries_box = \
+                self.__get_nested_album(iw_root, iw.song['album']).box
+
+        iw.parent = iw_root
+        if not iw in iw_root.nested_active:
+            iw_root.nested.append(iw)
+            iw_root.nested_active[iw] = False
+
+        s = iw.song
+        track = s('~#track')
+        label = "%s%s" % (str(track) + ' | '
+                          if track else "",
+                          s['title'])
+        cb = Gtk.CheckButton(label)
+        cb.get_child().set_line_wrap(True)
+        cb.set_tooltip_markup(s['~filename'])
+        cb.connect("toggled",
+            lambda w, iw_root=iw_root, iw=iw, *_:
+                self.__nested_song_toggled(iw_root, iw, w.get_active()))
+        active = False
+        active = iw_root.nested_active[iw]
+        cb.set_active(active)
+        entries_box.pack_start(cb, False, False, 0)
+        iw_root.songlist.widgets[iw] = cb
+        if gtk_version >= (3, 20):
+            add_css(cb, """
+                .checkbutton indicator {
+                    min-height: 10px;
+                    min-width: 10px;
+                }""", True)
+        else:
+            add_css(cb, """
+                GtkCheckButton {
+                    -GtkCheckButton-indicator-size: 10;
+                }""", True)
+        cb.set_visible(True)
+
+        return cb
+
+    def _remove_nested_image_widget(self, iw_root, iw):
+
+        album = iw.song['album']
+        album_cb = self.__get_nested_album(iw_root, album)
+        box = album_cb.box
+        iw_root.nested.remove(iw)
+        del iw_root.nested_active[iw]
+        box.remove(iw_root.songlist.widgets[iw])
+        if not box.get_children():
+            # remove album cb and container
+            iw_root.songlist.remove(box.get_parent())  # align
+            iw_root.songlist.remove(album_cb)
+
+
+class EmbeddedArtBoxSignalBox(GObject.GObject):
+
+    __gsignals__ = {
+        "subselect-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int]),
+        "subtotal-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int]),
+        "select-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int]),
+        "total-count-changed":
+        (GObject.SignalFlags.RUN_LAST, None, [int])
+    }
+
+
 class EmbeddedArtBox(Gtk.HBox):
 
     def __init__(self):
@@ -81,7 +361,7 @@ class EmbeddedArtBox(Gtk.HBox):
 
         self.add_events(Gdk.EventMask.BUTTON_PRESS_MASK)
 
-        self.signalbox = SignalBox()
+        self.signalbox = EmbeddedArtBoxSignalBox()
 
         self.__songs = None
 
@@ -91,6 +371,74 @@ class EmbeddedArtBox(Gtk.HBox):
         # covers stack
         self.image_widgets = []
         self.covers_max = 50
+
+    @property
+    def subselect_count(self):
+        return self.__covers_subselect_count
+
+    @subselect_count.setter
+    def subselect_count(self, value):
+        self.__covers_subselect_count = value
+        self.signalbox.emit('subselect-count-changed', value)
+
+    @property
+    def subtotal_count(self):
+        return self.__covers_subtotal_count
+
+    @subtotal_count.setter
+    def subtotal_count(self, value):
+        self.__covers_subtotal_count = value
+        self.signalbox.emit('subtotal-count-changed', value)
+
+    @property
+    def select_count(self):
+        return self.__covers_select_count
+
+    @select_count.setter
+    def select_count(self, value):
+        self.__covers_select_count = value
+        self.signalbox.emit('select-count-changed', value)
+
+    @property
+    def total_count(self):
+        return self.__covers_total_count
+
+    @total_count.setter
+    def total_count(self, value):
+        self.__covers_total_count = value
+        self.signalbox.emit('total-count-changed', value)
+
+    def get_visible_widgets(self):
+        return [w for w in self.get_children()
+                    if w.get_visible()]
+
+    def get_selected_widgets(self):
+        return [w for w in self.get_visible_widgets()
+                    if w.image_widget.is_selected]
+
+    def get_selected_image_widgets(self):
+        return [iw for w in self.get_selected_widgets()
+                       for iw in w.image_widget.nested
+                           if iw.selected()]
+
+    def update_subselect_count(self):
+        self.subselect_count = \
+            len(self.get_selected_image_widgets())
+
+    def update_subtotal_count(self):
+        self.subtotal_count = len(self.image_widgets)
+
+    def update_select_count(self):
+        self.select_count = sum(1 for w in self.get_selected_widgets())
+
+    def update_total_count(self):
+        self.total_count = sum(1 for w in self.get_visible_widgets())
+
+    def update_counts(self):
+        self.update_subselect_count()
+        self.update_subtotal_count()
+        self.update_select_count()
+        self.update_total_count()
 
     def update(self, songs):
 
@@ -188,7 +536,8 @@ class EmbeddedArtBox(Gtk.HBox):
                     if nested:
                         for idx2 in xrange(len(iw_root.nested) - 1, -1, -1):
                             if iw_root.nested[idx2] == iw:
-                                self.__remove_nested_image_widget(iw_root, iw)
+                                iw_root.\
+                                    _remove_nested_image_widget(iw_root, iw)
                                 # remove its (hidden) outer
                                 self.remove(iw.outer)
                                 self.image_widgets.remove(iw)
@@ -223,10 +572,9 @@ class EmbeddedArtBox(Gtk.HBox):
                             iw_next.nested_active = iw.nested_active
                             for w in iw_next.nested:
                                 w.parent = iw_next
-                            iw_next.collapsed(iw_next, CONFIG.collapsed_view)
+                            iw_next.collapsed(CONFIG.collapsed_view)
                             # set selected
-                            iw_next.highlight_toggle(iw_next,
-                                                     force_highlight=False)
+                            iw_next.highlight_toggle(force_highlight=False)
                             # ensure visible
                             iw_next.outer.set_visible(True)
 
@@ -256,12 +604,12 @@ class EmbeddedArtBox(Gtk.HBox):
                                 iw_root = outer.image_widget
                                 image_hashes_global[
                                     iw_root.image.data_hash] = iw_root
-                        iw.collapsed(iw, True)
+                        iw.collapsed(True)
                         if iw.image.data_hash in image_hashes_global:
                             # add nested
                             iw.is_nested = True
                             iw_root = image_hashes_global[iw.image.data_hash]
-                            self.__add_nested_image_widget(iw_root, iw)
+                            iw_root._add_nested_image_widget(iw_root, iw)
 
                     # add
                     self.pack_start(iw.outer, False, False, 2)
@@ -274,193 +622,6 @@ class EmbeddedArtBox(Gtk.HBox):
                     image_hashes_old[hash_] += 1
 
         self.update_counts()
-
-    def __get_nested_album(self, iw_root, name):
-        for w in iw_root.songlist.get_children():
-            if isinstance(w, Gtk.CheckButton) and w.album == name:
-                return w
-        return self.__add_nested_album(iw_root, name)
-
-    def __add_nested_album(self, iw_root, name):
-
-        cb = Gtk.CheckButton(name)
-        cb.get_children()[0].get_style_context()\
-            .add_class("boldandbig2")
-        if gtk_version >= (3, 20):
-            add_css(cb, """
-                .checkbutton indicator {
-                    min-height: 6px;
-                    min-width: 6px;
-                }""", True)
-        else:
-            add_css(cb, """
-                GtkCheckButton {
-                    -GtkCheckButton-indicator-size: 6;
-                }""", True)
-        cb.connect("toggled",
-            lambda w, iw=iw_root, *_:
-                self.__nested_album_toggled(iw, w.get_children()[0]
-                    .get_text(), w.get_active()))
-
-        iw_root.songlist.pack_start(cb, False, False, 2)
-        entries_box = Gtk.VBox(spacing=1)
-        entries_align = Align(left=10)
-        entries_align.add(entries_box)
-        iw_root.songlist.pack_start(entries_align, False, False, 2)
-
-        cb.album = name
-        cb.box = entries_box
-
-        return cb
-
-    def __add_nested_image_widget(self, iw_root, iw, entries_box=None):
-
-        if not entries_box:
-            entries_box = \
-                self.__get_nested_album(iw_root, iw.song['album']).box
-
-        iw.parent = iw_root
-        if not iw in iw_root.nested_active:
-            iw_root.nested.append(iw)
-            iw_root.nested_active[iw] = False
-
-        s = iw.song
-        track = s('~#track')
-        label = "%s%s" % (str(track) + ' | '
-                          if track else "",
-                          s['title'])
-        cb = Gtk.CheckButton(label)
-        cb.get_child().set_line_wrap(True)
-        cb.set_tooltip_markup(s['~filename'])
-        cb.connect("toggled",
-            lambda w, iw_root=iw_root, iw=iw, *_:
-                self.__nested_song_toggled(iw_root, iw, w.get_active()))
-        active = False
-        active = iw_root.nested_active[iw]
-        cb.set_active(active)
-        entries_box.pack_start(cb, False, False, 0)
-        iw_root.songlist.widgets[iw] = cb
-        if gtk_version >= (3, 20):
-            add_css(cb, """
-                .checkbutton indicator {
-                    min-height: 10px;
-                    min-width: 10px;
-                }""", True)
-        else:
-            add_css(cb, """
-                GtkCheckButton {
-                    -GtkCheckButton-indicator-size: 10;
-                }""", True)
-        cb.set_visible(True)
-
-        return cb
-
-    def __remove_nested_image_widget(self, iw_root, iw):
-
-        album = iw.song['album']
-        album_cb = self.__get_nested_album(iw_root, album)
-        box = album_cb.box
-        iw_root.nested.remove(iw)
-        del iw_root.nested_active[iw]
-        box.remove(iw_root.songlist.widgets[iw])
-        if not box.get_children():
-            # remove album cb and container
-            iw_root.songlist.remove(box.get_parent())  # align
-            iw_root.songlist.remove(album_cb)
-
-    @property
-    def subselect_count(self):
-        return self.__covers_subselect_count
-
-    @subselect_count.setter
-    def subselect_count(self, value):
-        self.__covers_subselect_count = value
-        self.signalbox.emit('subselect-count-changed', value)
-
-    @property
-    def subtotal_count(self):
-        return self.__covers_subtotal_count
-
-    @subtotal_count.setter
-    def subtotal_count(self, value):
-        self.__covers_subtotal_count = value
-        self.signalbox.emit('subtotal-count-changed', value)
-
-    @property
-    def select_count(self):
-        return self.__covers_select_count
-
-    @select_count.setter
-    def select_count(self, value):
-        self.__covers_select_count = value
-        self.signalbox.emit('select-count-changed', value)
-
-    @property
-    def total_count(self):
-        return self.__covers_total_count
-
-    @total_count.setter
-    def total_count(self, value):
-        self.__covers_total_count = value
-        self.signalbox.emit('total-count-changed', value)
-
-    def get_visible_widgets(self):
-        return [w for w in self.get_children()
-                    if w.get_visible()]
-
-    def get_selected_widgets(self):
-        return [w for w in self.get_visible_widgets()
-                    if w.image_widget.is_selected]
-
-    def get_selected_image_widgets(self):
-        return [iw for w in self.get_selected_widgets()
-                       for iw in w.image_widget.nested
-                           if iw.selected(iw)]
-
-    def update_subselect_count(self):
-        self.subselect_count = \
-            len(self.get_selected_image_widgets())
-
-    def update_subtotal_count(self):
-        self.subtotal_count = len(self.image_widgets)
-
-    def update_select_count(self):
-        self.select_count = sum(1 for w in self.get_selected_widgets())
-
-    def update_total_count(self):
-        self.total_count = sum(1 for w in self.get_visible_widgets())
-
-    def update_counts(self):
-        self.update_subselect_count()
-        self.update_subtotal_count()
-        self.update_select_count()
-        self.update_total_count()
-
-    def __clear_covers(self):
-        self.image_widgets = []
-        for w in self.get_children():
-            self.remove(w)
-
-    def __cover_click_single(self, coverimage):
-        if self.__double_clicked:
-            return False
-        box = coverimage.box
-
-        box.highlight_toggle(box)
-        return False
-
-    def __cover_click_double(self, coverimage):
-        coverimage._show_cover()
-
-    def __cover_click(self, coverimage, event):
-        if event.type == Gdk.EventType.BUTTON_PRESS:
-            self.__double_clicked = False
-            GLib.timeout_add(DOUBLE_CLICK_TIMEOUT,
-                             self.__cover_click_single, coverimage)
-        elif event.type == Gdk.EventType._2BUTTON_PRESS:
-            self.__double_clicked = True
-            self.__cover_click_double(coverimage)
-        return True
 
     def _collapse_toggle(self, collapsed):
         if not self.total_count:
@@ -486,8 +647,8 @@ class EmbeddedArtBox(Gtk.HBox):
                     data_hashes[h] = iw
 
             for key, iw in data_hashes.items():
-                iw.highlight_toggle(iw, False)
-                iw.collapsed(iw, True)
+                iw.highlight_toggle(False)
+                iw.collapsed(True)
 
         else:
             # flat display, one image to one (non-distinct) song
@@ -500,20 +661,16 @@ class EmbeddedArtBox(Gtk.HBox):
                 iw.is_nested = False
                 iw.nested = [iw]
                 iw.nested_active[iw] = iw_active[iw]
-                iw.highlight_toggle(iw, iw_active[iw])
-                iw.collapsed(iw, False)
+                iw.highlight_toggle(iw_active[iw])
+                iw.collapsed(False)
                 w.show()
 
         self.update_counts()
 
-    def __nested_album_toggled(self, w, name, active):
-        for iw, w in w.songlist.widgets.items():
-            if iw.song['album'] == name:
-                w.set_active(active)
-
-    def __nested_song_toggled(self, w, w2, active):
-        w.nested_active[w2] = active
-        self.update_subselect_count()
+    def __clear_covers(self):
+        self.image_widgets = []
+        for w in self.get_children():
+            self.remove(w)
 
     def __generate_covers(self, song):
 
@@ -526,159 +683,12 @@ class EmbeddedArtBox(Gtk.HBox):
 
         widgets = []
         for image in imageitems:
-
-            title = "<b>" + GLib.markup_escape_text(image.album) + "</b>"
-            name = os.path.splitext(os.path.basename(image.name))[0] \
-                       .split('_')[-1]
-            size = "x".join([str(image.width), str(image.height)])
-
-            coverimage = CoverImage(resize=True)
-            coverimage.set_song(song)
-            coverimage.cover_click_cb = self.__cover_click
-
-            fsn = path2fsn(image.name)
-            fo = open(fsn, "rb")
-            coverimage.set_image(fo, name, image.external)
-
-            image_widget = Gtk.HBox(spacing=0, homogeneous=False)
-            image_widget_cover_box = Gtk.VBox()
-            image_widget.pack_start(image_widget_cover_box, False, True, 2)
-            image_widget_songlist_scroll = ScrolledWindow()
-            image_widget_songlist_scroll.set_policy(
-                Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-            image_widget_songlist_scroll.set_shadow_type(Gtk.ShadowType.NONE)
-
-            image_widget_songlist_box = Gtk.VBox()
-            image_widget_songlist_scroll.add(image_widget_songlist_box)
-            image_widget_songlist_scroll.show_all()
-            image_widget.songlist = image_widget_songlist_box
-            image_widget.songlist.widgets = {}
-            image_widget.pack_start(
-                image_widget_songlist_scroll, False, True, 0)
-
-            image_widget.image = image
-            image_widget.song = song
-            image_widget.nested = [image_widget]
-            image_widget.nested_active = {image_widget: False}
-            image_widget.cover = coverimage
-            image_widget.image_title = title
-            image_widget.image_name = name
-            image_widget.image_size = size
-            image_widget.is_selected = False
-            image_widget.is_nested = False
-            image_widget.parent = None
-
-            image_widget_cover_box.pack_start(coverimage, True, True, 2)
-
-            image_widget_hborder = Gtk.HBox()
-            image_widget_hborder.pack_start(
-                image_widget, True, True, 3)
-            image_widget_vborder = Gtk.VBox()
-            image_widget_vborder.pack_start(
-                image_widget_hborder, True, True, 3)
-
-            image_widget_outer = Gtk.EventBox()
-            image_widget_outer.add(image_widget_vborder)
-
-            def highlight_toggle(box, force_highlight=None):
-                scv = box.vborder.get_style_context()
-                sch = box.hborder.get_style_context()
-                if force_highlight is False or \
-                    (scv.has_class('highlightbox') and
-                     force_highlight is not True):
-                    scv.remove_class('highlightbox')
-                    sch.remove_class('highlightbox')
-                    box.is_selected = False
-                else:
-                    if not scv.has_class('highlightbox'):
-                        scv.add_class('highlightbox')
-                        sch.add_class('highlightbox')
-                    box.is_selected = True
-                self.update_select_count()
-                self.update_subselect_count()
-
-            image_widget.vborder = image_widget_vborder
-            image_widget.hborder = image_widget_hborder
-            image_widget.highlight_toggle = highlight_toggle
-
-            def selected(widget):
-                if CONFIG.collapsed_view:
-                    if widget.is_nested:
-                        return widget.parent.is_selected and \
-                                   widget.parent.nested_active[widget]
-                    else:
-                        return widget.nested_active[widget]
-                else:
-                    return widget.is_selected
-
-            image_widget.selected = selected
-
-            def collapsed(widget, visible):
-                if visible:
-                    # (re)build song list
-                    for w in widget.songlist.get_children():
-                        widget.songlist.remove(w)
-                    widget.songlist.set_size_request(200, -1)
-                    for k, g in groupby(widget.nested,
-                                        lambda w: w.song['album']):
-                        album_cb = self.__add_nested_album(widget, k)
-
-                        active_all = True
-                        for iw2 in sorted(g, key=lambda iw:
-                                                     iw.song("~#track")):
-                            cb = self.__add_nested_image_widget(widget, iw2)
-                            if active_all:
-                                active_all = cb.get_active()
-
-                        album_cb.set_active(active_all)
-
-                    widget.label.hide()
-                    widget.songlist.get_parent().show_all()
-                else:
-                    widget.nested = [widget]
-                    active = False
-                    if widget in widget.nested_active:
-                        active = widget.nested_active[widget]
-                    widget.nested_active = {widget: active}
-                    widget.songlist.set_size_request(-1, -1)
-                    widget.songlist.hide()
-                    widget.label.show()
-
-            image_widget.collapsed = collapsed
-
-            tooltip = []
-            if CONFIG.size_in_tooltip:
-                tooltip.append(size)
-            if tooltip:
-                coverimage.set_tooltip_markup('\n'.join(tooltip))
-
-            desc = str.format("%s%s%s") % (
-                title,
-                " [" + name + "]" if CONFIG.name_in_label else "",
-                " [" + size + "]" if CONFIG.size_in_label else "")
-            label_desc = Gtk.Label(desc)
-            label_desc.set_no_show_all(True)
-            label_desc.set_visible(True)
-            label_desc.set_line_wrap(True)
-            label_desc.set_use_markup(True)
-            label_desc.set_tooltip_markup(image.path)
-            image_widget.label = label_desc
-            image_widget_cover_box.pack_start(label_desc, False, True, 4)
-
-            image_widget_outer_align = Align(bottom=15)
-            image_widget_outer_align.add(image_widget_outer)
-
-            coverimage.box = image_widget
-            image_widget_outer_align.image_widget = image_widget
-            image_widget.outer = image_widget_outer_align
-
-            def highlight_toggle_cb(widget, event, *data):
-                widget.image_widget.highlight_toggle(widget.image_widget)
-
-            image_widget_outer_align.connect(
-                "button-press-event", highlight_toggle_cb)
-
-            widgets.append(image_widget_outer_align)
+            iw = ImageWidget(image, song)
+            iw.signalbox.connect('subselect-count-changed',
+                                 lambda _: self.update_subselect_count())
+            iw.signalbox.connect('subselect-count-changed',
+                                 lambda _: self.update_select_count())
+            widgets.append(iw.outer)
 
         return widgets
 
