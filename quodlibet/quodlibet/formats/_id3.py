@@ -563,7 +563,14 @@ class ID3File(AudioFile):
         frame = mutagen.id3.APIC(
             encoding=3, mime=image.mime_type, type=type_,
             desc=u"", data=data)
-        tag.add(frame, strict=strict)
+
+        if not strict:
+            # abuse the 'desc' attribute (used in creation of the frame's
+            # hashkey) to ensure uniqueness (as far as mutagen cares)
+            while frame.HashKey in tag:
+                frame.desc += u" "
+
+        tag.add(frame)
 
         with translate_errors():
             audio.save()
