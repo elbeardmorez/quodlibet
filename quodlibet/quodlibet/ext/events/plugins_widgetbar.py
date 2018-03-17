@@ -271,7 +271,7 @@ class PluginsWidgetBarPluginDnDMixin(object):
                     except ValueError:
                         return None
                 pathfiles = \
-                    listfilter(None, list(map(to_filename, data.get_uris())))
+                    listfilter(None, [to_filename(s) for s in data.get_uris()])
             else:
                 # TODO
                 # do something useful here ..add to library?!
@@ -421,14 +421,13 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         cbdesc_target = []
         cbdesc_args = []
         cbdesc_target = \
-            list(reversed(list(map(lambda s: s.strip('<> '),
-                [s for ss in cbdesc.split('|')
-                                 [0:max(len(cbdesc.split("|")) - 1, 2)]
-                   for s in ss.split('.')]))))
+            [s.strip('<> ')
+             for s in [s for ss in cbdesc.split('|')[
+                                   0:max(len(cbdesc.split("|")) - 1, 2)]
+                  for s in ss.split('.')]][::-1]
         if len(cbdesc.split('|')) > 2:
-            cbdesc_args = \
-               list(reversed(list(map(lambda s: s.strip('<> '),
-                          cbdesc.split('|')[-1].split('.')))))
+            cbdesc_args = [s.strip('<> ')
+                           for s in cbdesc.split('|')[-1].split('.')][::-1]
             if cbdesc_args:
                 args = cbdesc_args
 
@@ -527,8 +526,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         except:
             if hasattr(target, 'get_arguments'):
                 # max two args from tuple of Gtk arg infos
-                params = \
-                    list(map(lambda o: o.__name__, target.get_arguments()))
+                params = [o.__name__ for o in target.get_arguments()]
             else:
                 # hunt
                 paths = [['__call__']] # add more paths to try
@@ -569,7 +567,7 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
             raise Exception(
                       "more arguments needed for %r\n"
                       "args: %s, params: %s"
-                      % (target, list(reversed(args_sub.keys())), params))
+                      % (target, args_sub.keys()[::-1], params))
             return []
         else:
             return args_sub.values() # ordered
