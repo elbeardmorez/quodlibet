@@ -209,15 +209,14 @@ class PluginsWidgetBarPluginDnDMixin(object):
 
         if tid == DND_QL_PLUGIN:
             type_ = Gdk.atom_intern("text/x-quodlibet-plugin", True)
-            data.set(type_, 8, widget.drag_widget.id)
-
+            data.set(type_, 8, widget.drag_widget.id.encode())
         return True
 
     def __drag_data_received(self, widget, ctx, x, y, data, info, etime):
 
         if info == DND_QL_PLUGIN:
             target = widget.drag_widget.id
-            source = data.get_data()
+            source = data.get_data().decode()
 #            side_desc = "left" if self.__drag_side == 0 else "right"
 #            print_d("moving %r to %s of %r" % (source, side_desc, target))
 
