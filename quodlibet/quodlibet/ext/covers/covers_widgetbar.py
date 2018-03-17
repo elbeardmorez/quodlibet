@@ -10,7 +10,6 @@ import os
 import glob
 import hashlib
 from itertools import groupby
-from operator import itemgetter
 from senf import path2fsn
 from gi.repository import Gtk, Gdk, GLib
 
@@ -394,22 +393,21 @@ class CoversWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
     def __save(self):
         print_d("saving config data")
-        image_paths = \
-            list(map(lambda ii: ii.path, self.__coversbox.covers))
+        image_paths = [ii.path for ii in self.__coversbox.covers]
         image_paths_nonconcurrent_unique = \
-                 list(map(itemgetter(0), groupby(image_paths)))[
-               -1 * min(len(self.__coversbox.covers), CONFIG.songs_save):]
+            [ii[0] for ii in groupby(image_paths)][
+                -1 * min(len(self.__coversbox.covers), CONFIG.songs_save):]
         CONFIG.songs_history = image_paths_nonconcurrent_unique
         self.__write_songs_history()
 
     def __read_songs_history(self):
         items = WidgetBar.read_datafile(SONGS_HISTORY_SET, 1)
-        CONFIG.songs_history = list(map(lambda x: x[0], items))
+        CONFIG.songs_history = [x[0] for x in items]
 
     def __write_songs_history(self):
         WidgetBar.write_datafile(
             SONGS_HISTORY_SET,
-            list(map(lambda x: [x], CONFIG.songs_history)),
+            [[x] for x in CONFIG.songs_history],
             lambda x: x)
 
     def __songs_save_changed(self, widget, *data):
