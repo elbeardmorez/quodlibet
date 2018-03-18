@@ -161,7 +161,7 @@ class ImageWidget(Gtk.HBox):
         self.outer.image_widget = self
 
     def highlight_toggle_cb(self, event, *data):
-        self.image_widget.highlight_toggle()
+        self.highlight_toggle()
 
     def highlight_toggle(self, force_highlight=None):
         scv = self.vborder.get_style_context()
@@ -947,7 +947,7 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
         add_global_css("""
             .highlightbox {
-                border-color: #558fcb;
+                background-color: #558fcb;
                 border-radius: 2px;
             }
             .boldandbig1 {
