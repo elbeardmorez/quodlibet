@@ -21,11 +21,21 @@ from quodlibet.util import print_w
 from quodlibet.util.thread import call_async, Cancellable
 from quodlibet.qltk import add_css, is_accel, gtk_version
 
-from .paned import Paned, RPaned, RHPaned, RVPaned, ConfigRPaned, \
-    ConfigRHPaned, ConfigRVPaned
+from .paned import Paned, RHPaned, RVPaned, \
+                   XHPaned, XVPaned, \
+                   ConfigRHPaned, ConfigRVPaned, \
+                   MultiRHPaned, MultiRVPaned, \
+                   MultiXHPaned, MultiXVPaned, \
+                   ConfigMultiRHPaned, ConfigMultiRVPaned, \
+                   PaneLock
 
-
-Paned, RPaned, RHPaned, RVPaned, ConfigRPaned, ConfigRHPaned, ConfigRVPaned
+Paned, RHPaned, RVPaned
+XHPaned, XVPaned
+ConfigRHPaned, ConfigRVPaned
+MultiRHPaned, MultiRVPaned
+MultiXHPaned, MultiXVPaned
+ConfigMultiRHPaned, ConfigMultiRVPaned
+PaneLock
 
 
 class ScrolledWindow(Gtk.ScrolledWindow):
@@ -514,3 +524,22 @@ class HighlightToggleButton(Gtk.ToggleButton):
     def do_draw(self, context):
         self._update_provider()
         return Gtk.ToggleButton.do_draw(self, context)
+
+
+class ExpanderTitleContainerHack(Gtk.HBox):
+
+    def __init__(self, content=None, *args, **kwargs):
+        super(Gtk.HBox, self).__init__(*args, **kwargs)
+        if content:
+            self.add(content)
+
+    def do_get_preferred_width(self):
+        # Workaround for https://bugzilla.gnome.org/show_bug.cgi?id=765602
+        # set_label_fill() no longer works since 3.20. Fake a natural size
+        # which is larger than the expander can be to force the parent to
+        # allocate to us the whole space.
+        min_, nat = Gtk.HBox.do_get_preferred_width(self)
+        if gtk_version > (3, 19):
+            # if we get too large gtk calcs will overflow..
+            nat = max(nat, 2 ** 16)
+        return (min_, nat)
