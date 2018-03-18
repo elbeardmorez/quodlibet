@@ -821,9 +821,11 @@ class EmbeddedArtBox(Gtk.HBox):
                 continue
             try:
                 s.clear_images()
-                self._refresh([s])
             except AudioFileError:
                 print_exc()
+
+        self.__clear_covers()
+        self.update_counts()
 
     def _remove_image(self):
 
