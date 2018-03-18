@@ -518,7 +518,7 @@ class EmbeddedArtBox(Gtk.HBox):
             # -multiple instances from the same song (duplicate art!)
             # -multiple songs using the same art from the same or different
             #  albums
-            for idx in xrange(len(widgets_old) - 1, -1, -1):
+            for idx in range(len(widgets_old) - 1, -1, -1):
                 iw = widgets_old[idx]
                 outer = iw.outer
                 iw_root = iw
@@ -536,7 +536,7 @@ class EmbeddedArtBox(Gtk.HBox):
                     image_hashes_old[hash_] > image_hashes_new[hash_]:
                     # remove selected
                     if nested:
-                        for idx2 in xrange(len(iw_root.nested) - 1, -1, -1):
+                        for idx2 in range(len(iw_root.nested) - 1, -1, -1):
                             if iw_root.nested[idx2] == iw:
                                 iw_root.\
                                     _remove_nested_image_widget(iw_root, iw)
