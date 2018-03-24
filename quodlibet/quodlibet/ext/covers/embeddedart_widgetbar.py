@@ -953,6 +953,9 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         super(EmbeddedArtWidgetBarPlugin, self).__init__()
         self.live = False
 
+        self.__style()
+
+    def __style(self):
         add_global_css("""
             .highlightbox {
                 background-color: #558fcb;
@@ -969,8 +972,7 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             .warning {
                 color: red;
                 font-weight: bold;
-            }
-        """, True)
+            }""", True)
 
     def enabled(self):
         pass
