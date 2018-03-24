@@ -78,6 +78,7 @@ class ImageWidget(Gtk.HBox):
         super(ImageWidget, self).__init__()
 
         self.signalbox = ImageWidgetSignalBox()
+        self.update_lock = False
 
         name = os.path.splitext(os.path.basename(image.name))[0] \
                    .split('_')[-1]
@@ -190,6 +191,23 @@ class ImageWidget(Gtk.HBox):
         else:
             return self.is_selected
 
+    def collapsed_select_check(self, album=None):
+        for k, g in groupby(self.nested,
+                            lambda iw: iw.song['album']):
+            if album and not k == album:
+                continue
+            group = [*g]
+            song_count = len(group)
+            selected_song_count = len([iw for iw in group
+                                          if self.nested_active[iw]])
+
+            if (selected_song_count >= song_count - 1):
+                # check album selection state
+                album_cb = self.__get_nested_album(self, k)
+                self.update_lock = True
+                album_cb.set_active(selected_song_count == song_count)
+                self.update_lock = False
+
     def collapsed(self, visible):
         if visible:
             # all iws with identical image data to this iw's have been
@@ -201,15 +219,11 @@ class ImageWidget(Gtk.HBox):
             self.songlist.set_size_request(200, -1)
             for k, g in groupby(self.nested,
                                 lambda iw: iw.song['album']):
-                album_cb = self.__add_nested_album(self, k)
-
-                active_all = True
+                self.__add_nested_album(self, k)
                 for iw in sorted(g, key=lambda iw2: iw2.song("~#track")):
-                    cb = self._add_nested_image_widget(self, iw)
-                    if active_all:
-                        active_all = cb.get_active()
+                    self._add_nested_image_widget(self, iw)
 
-                album_cb.set_active(active_all)
+            self.collapsed_select_check()
 
             self.label.hide()
             self.songlist.get_parent().show_all()
@@ -246,12 +260,20 @@ class ImageWidget(Gtk.HBox):
         return True
 
     def __nested_album_toggled(self, w, name, active):
+        if self.update_lock:
+            return
+        self.update_lock = True
         for iw, w in w.songlist.widgets.items():
             if iw.song['album'] == name:
                 w.set_active(active)
+        self.update_lock = False
+        self.signalbox.emit('subselect-count-changed')
 
     def __nested_song_toggled(self, iw_root, iw, active):
         iw_root.nested_active[iw] = active
+        if self.update_lock:
+            return
+        iw_root.collapsed_select_check(iw.song['album'])
         self.signalbox.emit('subselect-count-changed')
 
     def __get_nested_album(self, iw_root, name):
