@@ -40,6 +40,8 @@ class Config(object):
     size_in_label = BoolConfProp(_config, "size_in_label", False)
     size_in_tooltip = BoolConfProp(_config, "size_in_tooltip", True)
     collapsed_view = BoolConfProp(_config, "collapsed_view", False)
+    autoselect_all_selected =\
+         BoolConfProp(_config, "autoselect_all_selected", False)
 
 
 CONFIG = Config()
@@ -192,6 +194,8 @@ class ImageWidget(Gtk.HBox):
             return self.is_selected
 
     def collapsed_select_check(self, album=None):
+        autoselect = CONFIG.autoselect_all_selected
+
         for k, g in groupby(self.nested,
                             lambda iw: iw.song['album']):
             if album and not k == album:
@@ -201,12 +205,18 @@ class ImageWidget(Gtk.HBox):
             selected_song_count = len([iw for iw in group
                                           if self.nested_active[iw]])
 
+            all_selected = selected_song_count == song_count
             if (selected_song_count >= song_count - 1):
                 # check album selection state
                 album_cb = self.__get_nested_album(self, k)
                 self.update_lock = True
-                album_cb.set_active(selected_song_count == song_count)
+                album_cb.set_active(all_selected)
                 self.update_lock = False
+            if autoselect:
+                autoselect = all_selected
+
+        if not album and autoselect:
+            self.highlight_toggle(True)
 
     def collapsed(self, visible):
         if visible:
@@ -1207,6 +1217,9 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
         # toggles
         toggles = [
+            (plugin_id + '_autoselect_all_selected',
+             _("Autoselect collapsed containers with all selected"),
+             None, False, lambda *_: None),
             (plugin_id + '_name_in_label', _("Show image name in label"),
              None, False, lambda *x: self.__embeddedart_box.update_labels()),
             (plugin_id + '_size_in_label', _("Show image size in label"),
