@@ -351,19 +351,24 @@ class PluginsWidgetBarPlugin(UserInterfacePlugin, EventPlugin,
         self.__callbacks_dragdrop = {}
         self.__read_actions()
 
-        add_global_css("""
-            .highlightbox {background-color: #558fcb;
-                           border-radius: 2px;}
-            .lowlightbox {background-color: #000000;
-                           border-radius: 2px;}
-            """, True)
-
         self.live = True
 
+        self.__style()
         self.__content.show_all()
         self.__update_plugins()
 
         return self.__widgetbar
+
+    def __style(self):
+        add_global_css("""
+            .highlightbox {
+                background-color: #558fcb;
+                border-radius: 2px;
+            }
+            .lowlightbox {
+                background-color: #000000;
+                border-radius: 2px;
+            }""", True)
 
     def plugin_on_song_started(self, song):
         self._song_playing = song
