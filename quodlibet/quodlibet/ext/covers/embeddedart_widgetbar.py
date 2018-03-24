@@ -192,7 +192,10 @@ class ImageWidget(Gtk.HBox):
 
     def collapsed(self, visible):
         if visible:
-            # (re)build song list
+            # all iws with identical image data to this iw's have been
+            # nested in this container
+
+            # (re)build album/song list
             for w in self.songlist.get_children():
                 self.songlist.remove(w)
             self.songlist.set_size_request(200, -1)
@@ -211,6 +214,9 @@ class ImageWidget(Gtk.HBox):
             self.label.hide()
             self.songlist.get_parent().show_all()
         else:
+            # this iw has been nested in another iw which has identical
+            # image data
+
             self.nested = [self]
             active = False
             if self in self.nested_active:
