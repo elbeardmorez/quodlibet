@@ -197,7 +197,7 @@ class ImageWidget(Gtk.HBox):
                 self.songlist.remove(w)
             self.songlist.set_size_request(200, -1)
             for k, g in groupby(self.nested,
-                                lambda w: w.song['album']):
+                                lambda iw: iw.song['album']):
                 album_cb = self.__add_nested_album(self, k)
 
                 active_all = True
@@ -244,8 +244,8 @@ class ImageWidget(Gtk.HBox):
             if iw.song['album'] == name:
                 w.set_active(active)
 
-    def __nested_song_toggled(self, w, w2, active):
-        w.nested_active[w2] = active
+    def __nested_song_toggled(self, iw_root, iw, active):
+        iw_root.nested_active[iw] = active
         self.signalbox.emit('subselect-count-changed')
 
     def __get_nested_album(self, iw_root, name):
