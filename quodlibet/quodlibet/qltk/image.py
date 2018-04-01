@@ -148,14 +148,19 @@ def calc_scale_size(boundary, size, scale_up=True):
     bwidth, bheight = boundary
     iwidth, iheight = size
 
-    if bwidth <= 0 or bheight <= 0 or iwidth <= 0 or iheight <= 0:
+    if (bwidth <= 0 and bheight <= 0) or iwidth <= 0 or iheight <= 0:
         return 1, 1 # ensure validity without erroring. likely an initial state
 
     scale_w, scale_h = iwidth, iheight
 
+    iratio = float(iwidth) / iheight
+    if (bwidth <= 0):
+        bwidth = iratio * bheight
+    if (bheight <= 0):
+        bheight = iratio * bwidth
+
     if iwidth > bwidth or iheight > bheight or scale_up:
         bratio = float(bwidth) / bheight
-        iratio = float(iwidth) / iheight
 
         if iratio > bratio:
             scale_w = bwidth
@@ -164,6 +169,8 @@ def calc_scale_size(boundary, size, scale_up=True):
             scale_w = int(bheight * iratio)
             scale_h = bheight
 
+    #print_d("image: %dx%d, border: %dx%d, scaled: %dx%d" %
+    #        (iwidth, iheight, boundary[0], boundary[1], scale_w, scale_h))
     return scale_w, scale_h
 
 
