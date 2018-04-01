@@ -36,6 +36,7 @@ class Config(object):
     _config = PluginConfig(plugin_id)
 
     expanded = BoolConfProp(_config, "expanded", True)
+    images_max = IntConfProp(_config, "images_max", 100)
     name_in_label = BoolConfProp(_config, "name_in_label", True)
     size_in_label = BoolConfProp(_config, "size_in_label", False)
     size_in_tooltip = BoolConfProp(_config, "size_in_tooltip", True)
@@ -421,7 +422,6 @@ class EmbeddedArtBox(Gtk.HBox):
 
         # covers stack
         self.image_widgets = []
-        self.covers_max = 50
 
     @property
     def subselect_count(self):
@@ -501,7 +501,7 @@ class EmbeddedArtBox(Gtk.HBox):
             return
 
         for song in songs:
-            if len(self.image_widgets) == self.covers_max:
+            if len(self.image_widgets) == CONFIG.images_max:
                 print_d("covers max hit, ignoring then rest!")
                 break
             widgets = self.__generate_covers(song)
@@ -729,9 +729,9 @@ class EmbeddedArtBox(Gtk.HBox):
 
         imageitems = self.__get_artwork(song)
 
-        if len(self.image_widgets) + len(imageitems) >= self.covers_max:
-            if len(self.image_widgets) < self.covers_max:
-                imageitems = imageitems[:self.covers_max -
+        if len(self.image_widgets) + len(imageitems) >= CONFIG.images_max:
+            if len(self.image_widgets) < CONFIG.images_max:
+                imageitems = imageitems[:CONFIG.images_max -
                                          len(self.image_widgets)]
 
         widgets = []
@@ -1247,6 +1247,9 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
         if CONFIG.art_max_width_set:
             self.__embeddedart_box.update_art_size()
 
+    def __images_max_changed(self, widget, *data):
+        CONFIG.images_max = int(widget.get_value())
+
     def __update_preferences_controls(self):
         # move 'attached'
         for k, w in self.__preferences_controls.items():
@@ -1265,6 +1268,40 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
 
         self.__preferences_controls = {}
         box = Gtk.VBox(spacing=4)
+
+        # spins
+        spins = [
+            (plugin_id + '_images_max',
+             _("Max unique cover images for any selection of songs"), "",
+             CONFIG.images_max, 1, 999,
+             self.__images_max_changed),
+            (plugin_id + '_art_max_width', "", "",
+             CONFIG.art_max_width, 50, 999,
+             self.__art_max_width_changed)
+        ]
+
+        for key, label, tooltip, value, lower, upper, changed_cb in spins:
+            spin_box = Gtk.HBox()
+            spin_spin = Gtk.SpinButton(
+                adjustment=Gtk.Adjustment.new(
+                    value, lower, upper, 1, 10, 0), climb_rate=1, digits=0)
+            spin_spin.set_numeric(True)
+            if tooltip:
+                spin_spin.set_tooltip_text(tooltip)
+            spin_spin.connect('value-changed', changed_cb)
+            spin_box.pack_start(spin_spin, False, False, 0)
+            spin_label = Gtk.Label(label)
+            spin_label.set_mnemonic_widget(spin_spin)
+            spin_label_align = Align(left=5)
+            spin_label_align.add(spin_label)
+            spin_box.pack_start(spin_label_align, False, False, 0)
+
+            box.pack_start(spin_box, True, True, 0)
+            self.__preferences_controls[
+                key.replace(plugin_id, "").strip("_")] = spin_box
+
+        # space
+        box.pack_start(Gtk.VBox(), False, True, 6)
 
         # toggles
         toggles = [
@@ -1299,35 +1336,8 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
             self.__preferences_controls[
                 key.replace(plugin_id, "").strip("_")] = ccb
 
-        # spins
-        spins = [
-            (plugin_id + '_art_max_width', "", "",
-             CONFIG.art_max_width, 50, 999,
-             self.__art_max_width_changed)
-        ]
-
         # space
         box.pack_start(Gtk.VBox(), False, True, 6)
-
-        for key, label, tooltip, value, lower, upper, changed_cb in spins:
-            spin_box = Gtk.HBox()
-            spin_spin = Gtk.SpinButton(
-                adjustment=Gtk.Adjustment.new(
-                    value, lower, upper, 1, 10, 0), climb_rate=1, digits=0)
-            spin_spin.set_numeric(True)
-            if tooltip:
-                spin_spin.set_tooltip_text(tooltip)
-            spin_spin.connect('value-changed', changed_cb)
-            spin_box.pack_start(spin_spin, False, False, 0)
-            spin_label = Gtk.Label(label)
-            spin_label.set_mnemonic_widget(spin_spin)
-            spin_label_align = Align(left=5)
-            spin_label_align.add(spin_label)
-            spin_box.pack_start(spin_label_align, False, False, 0)
-
-            box.pack_start(spin_box, True, True, 0)
-            self.__preferences_controls[
-                key.replace(plugin_id, "").strip("_")] = spin_box
 
         self.__update_preferences_controls()
 
