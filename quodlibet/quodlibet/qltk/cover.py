@@ -111,13 +111,19 @@ def get_no_cover_pixbuf(width, height, scale_factor=1):
 
 
 class ResizeImage(Gtk.Bin):
-    def __init__(self, resize=False, size=1):
+    def __init__(self,
+                 hcenter=True,
+                 vcenter=True,
+                 resize=False,
+                 size=1):
         Gtk.Bin.__init__(self)
         self._dirty = True
         self._path = None
         self._file = None
         self._pixbuf = None
         self._no_cover = None
+        self._hcenter = hcenter
+        self._vcenter = vcenter
         self._size = size
         self._resize = resize
 
@@ -219,8 +225,10 @@ class ResizeImage(Gtk.Bin):
         # is set to resize as its container is then necessarily set to expand
         # and fill which makes attempts at widget alignments futile - the
         # surface is always the full allocatable size
-        xoffset = int(0.5 * (alloc.width - pixbuf.get_width()))
-        yoffset = int(0.5 * (alloc.height - pixbuf.get_height()))
+        xoffset = int(0.5 * (alloc.width - pixbuf.get_width())) \
+                      if self._hcenter else 0
+        yoffset = int(0.5 * (alloc.height - pixbuf.get_height())) \
+                      if self._vcenter else 0
         Gtk.render_icon_surface(style_context, cairo_context, surface,
                                 xoffset, yoffset)
 
@@ -234,7 +242,12 @@ class CoverImage(Gtk.EventBox):
         'cover-visible': (GObject.SignalFlags.RUN_LAST, None, (bool,))
     }
 
-    def __init__(self, resize=False, size=70, song=None):
+    def __init__(self,
+                 hcenter=True,
+                 vcenter=True,
+                 resize=False,
+                 size=70,
+                 song=None):
         super(CoverImage, self).__init__()
         self.set_visible_window(False)
         self.__song = None
@@ -246,7 +259,7 @@ class CoverImage(Gtk.EventBox):
         self.album = ""
         self.external = False
 
-        self.add(ResizeImage(resize, size))
+        self.add(ResizeImage(hcenter, vcenter, resize, size))
         self.connect('button-press-event', self.__show_cover)
         self.set_song(song)
         self.get_child().show_all()
