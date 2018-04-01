@@ -10,11 +10,11 @@ import os
 import hashlib
 from itertools import groupby
 from senf import path2fsn
-from gi.repository import Gtk, Gdk, GLib, GObject
+from gi.repository import Gtk, Gdk, GLib, GObject, Pango
 
 from quodlibet import _
 from quodlibet import app
-from quodlibet.plugins import PluginConfig, BoolConfProp
+from quodlibet.plugins import PluginConfig, BoolConfProp, IntConfProp
 from quodlibet.plugins.events import EventPlugin
 from quodlibet.plugins.gui import UserInterfacePlugin
 from quodlibet.formats import EmbeddedImage
@@ -42,6 +42,8 @@ class Config(object):
     collapsed_view = BoolConfProp(_config, "collapsed_view", False)
     autoselect_all_selected =\
          BoolConfProp(_config, "autoselect_all_selected", False)
+    art_max_width_set = BoolConfProp(_config, "art_max_width_set", False)
+    art_max_width = IntConfProp(_config, "art_max_width", 200)
 
 
 CONFIG = Config()
@@ -86,8 +88,7 @@ class ImageWidget(Gtk.HBox):
                    .split('_')[-1]
         title = "<b>" + GLib.markup_escape_text(image.album) + "</b>"
         size = "x".join([str(image.width), str(image.height)])
-
-        coverimage = CoverImage(resize=True)
+        coverimage = CoverImage(vcenter=False)
         coverimage.set_song(song)
         coverimage.cover_click_cb = self.__cover_click
 
@@ -149,10 +150,20 @@ class ImageWidget(Gtk.HBox):
         label_desc.set_no_show_all(True)
         label_desc.set_visible(True)
         label_desc.set_line_wrap(True)
+        label_desc.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        # [note] set_max_width_chars implementation appears to allocate
+        # unused vertical space for its derived wrapped line count which
+        # isn't always utilised if the label is expanding in its container.
+        # e.g. label length 10, in a horizontal space large enough for 5
+        # characters. setting 'max_width_chars(2)' will results in a height
+        # of 5 lines being allocated when only 2 (10/5) are actually used.
+        # this space 'placeholder' appears to be 'by design'
+        label_desc.set_max_width_chars(15)
+        label_desc.set_justify(Gtk.Justification.CENTER)
         label_desc.set_use_markup(True)
         label_desc.set_tooltip_markup(image.path)
         self.label = label_desc
-        iw_cover_box.pack_start(label_desc, False, True, 4)
+        iw_cover_box.pack_start(label_desc, False, False, 4)
 
         iw_outer_align = Align(bottom=15)
         iw_outer_align.add(iw_outer)
@@ -498,6 +509,7 @@ class EmbeddedArtBox(Gtk.HBox):
                 self.pack_start(w, False, False, 2)
                 self.image_widgets.append(w.image_widget)
 
+        self.update_art_size()
         self.show_all()
 
         self.select_count = 0
@@ -705,6 +717,7 @@ class EmbeddedArtBox(Gtk.HBox):
                 iw.collapsed(False)
                 w.show()
 
+        self.update_art_size()
         self.update_counts()
 
     def __clear_covers(self):
@@ -842,6 +855,24 @@ class EmbeddedArtBox(Gtk.HBox):
                 tooltip.append(box.image_size)
             if tooltip:
                 box.cover.set_tooltip_markup('\n'.join(tooltip))
+
+    def update_art_size(self):
+        for widget in self.get_children():
+            cover = widget.image_widget.cover
+            label = widget.image_widget.label
+            if CONFIG.art_max_width_set:
+                cover.size_mode = Gtk.SizeRequestMode.CONSTANT_SIZE
+                cover.set_size_request(CONFIG.art_max_width, -1)
+                label.set_size_request(CONFIG.art_max_width, -1)
+            else:
+                cover.size_mode = Gtk.SizeRequestMode.WIDTH_FOR_HEIGHT
+                # minimal force, update containers allocation of natural
+                # size to child, before we switch to it with the following
+                # size requests
+                cover_box = cover.get_parent()
+                cover_box.check_resize()
+                cover.set_size_request(-1, -1)
+                label.set_size_request(-1, -1)
 
     def _clear_images(self):
 
@@ -1211,30 +1242,93 @@ class EmbeddedArtWidgetBarPlugin(UserInterfacePlugin, EventPlugin):
     def __save(self):
         print_d("saving config data")
 
+    def __art_max_width_changed(self, widget, *data):
+        CONFIG.art_max_width = int(widget.get_value())
+        if CONFIG.art_max_width_set:
+            self.__embeddedart_box.update_art_size()
+
+    def __update_preferences_controls(self):
+        # move 'attached'
+        for k, w in self.__preferences_controls.items():
+            if not hasattr(w, 'attached'):
+                continue
+            attached = self.__preferences_controls[w.attached]
+            attached.get_parent().remove(attached)
+            box = Gtk.HBox()
+            container = w.get_parent()
+            container.remove(w)
+            box.pack_start(w, False, False, 0)
+            box.pack_start(attached, True, True, 5)
+            container.add(box)
+
     def PluginPreferences(self, window):
 
+        self.__preferences_controls = {}
         box = Gtk.VBox(spacing=4)
 
         # toggles
         toggles = [
             (plugin_id + '_autoselect_all_selected',
              _("Autoselect collapsed containers with all selected"),
-             None, False, lambda *_: None),
+             None, False, None,
+             lambda *_: None),
             (plugin_id + '_name_in_label', _("Show image name in label"),
-             None, False, lambda *x: self.__embeddedart_box.update_labels()),
+             None, False, None,
+             lambda *_: self.__embeddedart_box.update_labels()),
             (plugin_id + '_size_in_label', _("Show image size in label"),
-             None, False, lambda *x: self.__embeddedart_box.update_labels()),
+             None, False, None,
+             lambda *_: self.__embeddedart_box.update_labels()),
             (plugin_id + '_size_in_tooltip', _("Show image size in tooltip"),
-             None, True, lambda *x: self.__embeddedart_box.update_tooltips()),
+             None, True, None,
+             lambda *_: self.__embeddedart_box.update_tooltips()),
+            (plugin_id + '_art_max_width_set', _("Max art width"),
+             None, True, 'art_max_width',
+             lambda *_: self.__embeddedart_box.update_art_size()),
         ]
 
-        for key, label, tooltip, default, changed_cb in toggles:
+        for key, label, tooltip, default, attached, changed_cb in toggles:
             ccb = ConfigCheckButton(label, 'plugins', key,
                                     populate=True)
             ccb.connect("toggled", changed_cb)
             if tooltip:
                 ccb.set_tooltip_text(tooltip)
+            if attached:
+                ccb.attached = attached
 
             box.pack_start(ccb, True, True, 0)
+            self.__preferences_controls[
+                key.replace(plugin_id, "").strip("_")] = ccb
+
+        # spins
+        spins = [
+            (plugin_id + '_art_max_width', "", "",
+             CONFIG.art_max_width, 50, 999,
+             self.__art_max_width_changed)
+        ]
+
+        # space
+        box.pack_start(Gtk.VBox(), False, True, 6)
+
+        for key, label, tooltip, value, lower, upper, changed_cb in spins:
+            spin_box = Gtk.HBox()
+            spin_spin = Gtk.SpinButton(
+                adjustment=Gtk.Adjustment.new(
+                    value, lower, upper, 1, 10, 0), climb_rate=1, digits=0)
+            spin_spin.set_numeric(True)
+            if tooltip:
+                spin_spin.set_tooltip_text(tooltip)
+            spin_spin.connect('value-changed', changed_cb)
+            spin_box.pack_start(spin_spin, False, False, 0)
+            spin_label = Gtk.Label(label)
+            spin_label.set_mnemonic_widget(spin_spin)
+            spin_label_align = Align(left=5)
+            spin_label_align.add(spin_label)
+            spin_box.pack_start(spin_label_align, False, False, 0)
+
+            box.pack_start(spin_box, True, True, 0)
+            self.__preferences_controls[
+                key.replace(plugin_id, "").strip("_")] = spin_box
+
+        self.__update_preferences_controls()
 
         return box
