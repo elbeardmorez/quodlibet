@@ -117,7 +117,8 @@ class CoversBox(Gtk.HBox):
                        .split('_')[-1]
             size = "x".join([str(image.width), str(image.height)])
 
-            coverimage = CoverImage(resize=True)
+            coverimage = CoverImage(
+                size_mode=Gtk.SizeRequestMode.WIDTH_FOR_HEIGHT)
             coverimage.set_song(song)
 
             fsn = path2fsn(image.name)

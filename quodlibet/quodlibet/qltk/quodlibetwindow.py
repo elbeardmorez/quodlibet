@@ -343,7 +343,7 @@ class TopBar(Gtk.Toolbar):
         box.pack_start(self._pattern_box, True, True, 0)
 
         # cover image
-        self.image = CoverImage(resize=True)
+        self.image = CoverImage(size_mode=Gtk.SizeRequestMode.WIDTH_FOR_HEIGHT)
         connect_destroy(player, 'song-started', self.__new_song)
 
         # FIXME: makes testing easier

@@ -114,7 +114,7 @@ class ResizeImage(Gtk.Bin):
     def __init__(self,
                  hcenter=True,
                  vcenter=True,
-                 resize=False,
+                 size_mode=Gtk.SizeRequestMode.CONSTANT_SIZE,
                  size=1):
         Gtk.Bin.__init__(self)
         self._dirty = True
@@ -125,7 +125,7 @@ class ResizeImage(Gtk.Bin):
         self._hcenter = hcenter
         self._vcenter = vcenter
         self._size = size
-        self._resize = resize
+        self._size_mode = size_mode
 
     def set_file(self, fileobj):
         if fileobj is None:
@@ -169,31 +169,33 @@ class ResizeImage(Gtk.Bin):
         return calc_scale_size((max_width, max_height), (width, height))
 
     def do_get_request_mode(self):
-        if self._resize:
-            return Gtk.SizeRequestMode.HEIGHT_FOR_WIDTH
-        return Gtk.SizeRequestMode.CONSTANT_SIZE
+        return self._size_mode
 
     def do_get_preferred_width(self):
-        if self._resize:
-            return (0, 0)
-        else:
-            width, height = self._get_size(self._size, self._size)
-            return (width, width)
+        min_width = self._size
+        nat_width, nat_height = self._get_size(min_width, -1)
+        return (min_width, nat_width)
 
     def do_get_preferred_height(self):
-        if self._resize:
-            return (0, 0)
+        min_height = self._size
+        nat_height, nat_height = self._get_size(min_height, -1)
+        return (min_height, nat_height)
+
+    def do_get_preferred_height_for_width(self, req_width):
+        width, height = self._get_size(req_width, -1)
+        mode = self.get_request_mode()
+        if (mode == Gtk.SizeRequestMode.CONSTANT_SIZE):
+            return (self._size, height)
         else:
-            width, height = self._get_size(self._size, self._size)
             return (height, height)
 
     def do_get_preferred_width_for_height(self, req_height):
-        width, height = self._get_size(300, req_height)
-
-        if width > 256:
-            width = width
-
-        return (width, width)
+        width, height = self._get_size(-1, req_height)
+        mode = self.get_request_mode()
+        if (mode == Gtk.SizeRequestMode.CONSTANT_SIZE):
+            return (self._size, width)
+        else:
+            return (width, width)
 
     def do_draw(self, cairo_context):
         pixbuf = self._get_pixbuf()
@@ -245,8 +247,8 @@ class CoverImage(Gtk.EventBox):
     def __init__(self,
                  hcenter=True,
                  vcenter=True,
-                 resize=False,
-                 size=70,
+                 size_mode=Gtk.SizeRequestMode.CONSTANT_SIZE,
+                 size=50,
                  song=None):
         super(CoverImage, self).__init__()
         self.set_visible_window(False)
@@ -259,10 +261,21 @@ class CoverImage(Gtk.EventBox):
         self.album = ""
         self.external = False
 
-        self.add(ResizeImage(hcenter, vcenter, resize, size))
+        self.__resizeimage = ResizeImage(hcenter, vcenter, size_mode, size)
+        self.add(self.__resizeimage)
         self.connect('button-press-event', self.__show_cover)
         self.set_song(song)
         self.get_child().show_all()
+
+    @property
+    def size_mode(self):
+        return self.__resizeimage._size_mode
+
+    @size_mode.setter
+    def size_mode(self, value):
+        self.__resizeimage._size_mode = value
+        self.__resizeimage.queue_resize()
+        self.__resizeimage.queue_draw()
 
     def set_image(self, _file, name="", external=False):
         if _file is not None and not _file.name:
