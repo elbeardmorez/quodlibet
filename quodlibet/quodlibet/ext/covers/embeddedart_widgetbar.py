@@ -730,7 +730,7 @@ class EmbeddedArtBox(Gtk.HBox):
         imageitems = self.__get_artwork(song)
 
         if len(self.image_widgets) + len(imageitems) >= self.covers_max:
-            if self.image_widgets < self.covers_max:
+            if len(self.image_widgets) < self.covers_max:
                 imageitems = imageitems[:self.covers_max -
                                          len(self.image_widgets)]
 
